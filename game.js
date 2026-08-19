@@ -4,6 +4,7 @@ import {
   DIFFICULTIES,
   FIXED_LEVELS_PER_DIFFICULTY,
   PIECES,
+  areCluesPlaced,
   fixedLevelSeed,
   generatePuzzle,
   getPiece,
@@ -36,7 +37,6 @@ const elements = {
   bestTime: document.querySelector("#bestTime"),
   clueCount: document.querySelector("#clueCount"),
   templateBoard: document.querySelector("#templateBoard"),
-  templateLegend: document.querySelector("#templateLegend"),
   gameBoard: document.querySelector("#gameBoard"),
   placedCounter: document.querySelector("#placedCounter"),
   boardMessage: document.querySelector("#boardMessage"),
@@ -46,7 +46,6 @@ const elements = {
   selectedPieceLabel: document.querySelector("#selectedPieceLabel"),
   rotateButton: document.querySelector("#rotateButton"),
   flipButton: document.querySelector("#flipButton"),
-  themeButton: document.querySelector("#themeButton"),
   statsButton: document.querySelector("#statsButton"),
   headerSolved: document.querySelector("#headerSolved"),
   howButton: document.querySelector("#howButton"),
@@ -177,20 +176,6 @@ function findTransform(pieceId, variantIndex) {
   return { rotation: 0, flipped: false };
 }
 
-function puzzleTheme() {
-  if (state.mode === "fixed") {
-    const difficultyOffset = DIFFICULTY_ORDER.indexOf(state.difficulty) * FIXED_LEVELS_PER_DIFFICULTY;
-    return (difficultyOffset + state.levelIndex) % 2 === 0 ? "polish" : "neon";
-  }
-  return state.endlessRound % 2 === 1 ? "polish" : "neon";
-}
-
-function setTheme(theme) {
-  elements.body.dataset.theme = theme;
-  const color = theme === "polish" ? "#d90429" : "#8c52ff";
-  document.querySelector('meta[name="theme-color"]').setAttribute("content", color);
-}
-
 function showToast(message) {
   window.clearTimeout(toastTimeout);
   elements.toast.textContent = message;
@@ -213,13 +198,11 @@ function loadPuzzle() {
   state.preview = null;
   state.elapsedSeconds = 0;
   state.startedAt = performance.now();
-  setTheme(puzzleTheme());
-
   const seed = state.mode === "fixed"
     ? fixedLevelSeed(state.difficulty, state.levelIndex)
     : state.endlessSeed;
   state.puzzle = generatePuzzle(seed, state.difficulty);
-  setBoardMessage("Wähle unten ein Teil aus und tippe auf das Spielfeld.");
+  setBoardMessage("Lege zuerst alle Teile aus der Vorlage exakt auf das Spielfeld.");
   renderAll();
 }
 
@@ -229,6 +212,10 @@ function placementAtCell(cellIndex) {
 
 function clueForPiece(pieceId) {
   return state.puzzle.clues.find((clue) => clue.pieceId === pieceId);
+}
+
+function cluePhaseComplete() {
+  return areCluesPlaced(clonePlacements(), state.puzzle.clues);
 }
 
 function reservedOwnerAtCell(cellIndex) {
@@ -255,6 +242,9 @@ function validateCandidate(candidate) {
   }
 
   const clue = clueForPiece(candidate.pieceId);
+  if (!clue && !cluePhaseComplete()) {
+    return { valid: false, reason: "Lege zuerst alle Vorlagen-Teile richtig auf das Feld." };
+  }
   if (clue && !placementsEqual(candidate, clue)) {
     return { valid: false, reason: "Dieses Vorlagen-Teil muss exakt an die gezeigte Position." };
   }
@@ -279,6 +269,12 @@ function selectPiece(pieceId) {
   if (state.solved) return;
   if (state.placed.has(pieceId)) {
     pickUpPiece(pieceId);
+    return;
+  }
+  if (!clueForPiece(pieceId) && !cluePhaseComplete()) {
+    const message = "Zuerst müssen alle Vorlagen-Teile richtig liegen.";
+    setBoardMessage(message, true);
+    showToast(message);
     return;
   }
   state.selectedPieceId = pieceId;
@@ -325,7 +321,10 @@ function placeSelected(cellIndex) {
   state.preview = null;
   state.rotation = 0;
   state.flipped = false;
-  setBoardMessage("Passt! Wähle das nächste Teil.");
+  const templateFinished = cluePhaseComplete();
+  setBoardMessage(templateFinished
+    ? "Vorlage vollständig! Jetzt kannst du die übrigen Teile einsetzen."
+    : "Passt! Lege das nächste Vorlagen-Teil auf.");
   renderBoard();
   renderTray();
   renderStatus();
@@ -371,7 +370,7 @@ function resetBoard() {
   state.flipped = false;
   state.startedAt = performance.now();
   state.elapsedSeconds = 0;
-  setBoardMessage("Spielfeld geleert – die Zeit läuft neu.");
+  setBoardMessage("Spielfeld geleert – beginne wieder mit den Vorlagen-Teilen.");
   renderBoard();
   renderTray();
   renderStatus();
@@ -417,23 +416,15 @@ function renderTemplate() {
   elements.templateBoard.replaceChildren();
   for (let index = 0; index < BOARD_ROWS * BOARD_COLS; index += 1) {
     const cell = document.createElement("span");
+    cell.className = "template-cell";
     const owner = cellOwners.get(index);
     if (owner) {
-      cell.className = "filled";
+      cell.classList.add("filled");
       cell.style.setProperty("--piece-color", getPiece(owner).color);
+      cell.title = getPiece(owner).name;
     }
     elements.templateBoard.append(cell);
   }
-
-  elements.templateLegend.replaceChildren();
-  state.puzzle.clues.forEach((clue) => {
-    const piece = getPiece(clue.pieceId);
-    const pill = document.createElement("span");
-    pill.className = "legend-pill";
-    pill.style.setProperty("--piece-color", piece.color);
-    pill.innerHTML = `<i></i>${piece.name}`;
-    elements.templateLegend.append(pill);
-  });
 }
 
 function renderBoard() {
@@ -491,6 +482,7 @@ function miniPiece(pieceId, variantIndex = 0) {
 
 function renderTray() {
   const clueIds = new Set(state.puzzle.clues.map((clue) => clue.pieceId));
+  const templateFinished = cluePhaseComplete();
   elements.pieceTray.replaceChildren();
   PIECES.forEach((piece) => {
     const card = document.createElement("button");
@@ -499,7 +491,13 @@ function renderTray() {
     card.dataset.piece = piece.id;
     card.style.setProperty("--piece-color", piece.color);
     const placed = state.placed.get(piece.id);
+    const locked = !clueIds.has(piece.id) && !templateFinished && !placed;
     if (placed) card.classList.add("placed");
+    if (locked) {
+      card.classList.add("locked");
+      card.disabled = true;
+      card.title = "Wird nach der vollständigen Vorlage freigeschaltet";
+    }
     if (state.selectedPieceId === piece.id) card.classList.add("selected");
     if (clueIds.has(piece.id)) card.classList.add("is-clue");
     const variantIndex = state.selectedPieceId === piece.id
@@ -509,7 +507,7 @@ function renderTray() {
     const name = document.createElement("strong");
     name.textContent = piece.name;
     const hint = document.createElement("small");
-    hint.textContent = placed ? "gesetzt" : clueIds.has(piece.id) ? "Pflichtposition" : "frei platzieren";
+    hint.textContent = placed ? "gesetzt" : clueIds.has(piece.id) ? "zuerst platzieren" : locked ? "noch gesperrt" : "frei platzieren";
     card.append(name, hint);
     card.setAttribute("aria-pressed", String(state.selectedPieceId === piece.id));
     elements.pieceTray.append(card);
@@ -658,9 +656,6 @@ elements.gameBoard.addEventListener("mouseleave", () => {
   renderBoard();
 });
 
-elements.themeButton.addEventListener("click", () => {
-  setTheme(elements.body.dataset.theme === "polish" ? "neon" : "polish");
-});
 elements.statsButton.addEventListener("click", () => {
   renderStats();
   openDialog(elements.statsDialog);

@@ -74,10 +74,13 @@ export function getVariantIndex(pieceId, rotation = 0, flipped = false) {
 export function placementCells(placement) {
   const variant = getVariants(placement.pieceId)[placement.variant];
   if (!variant) return [];
-  return variant.map(([row, col]) => {
+  return variant.flatMap(([row, col]) => {
     const boardRow = placement.row + row;
     const boardCol = placement.col + col;
-    return boardRow * BOARD_COLS + boardCol;
+    if (boardRow < 0 || boardRow >= BOARD_ROWS || boardCol < 0 || boardCol >= BOARD_COLS) {
+      return [];
+    }
+    return [boardRow * BOARD_COLS + boardCol];
   });
 }
 
@@ -97,6 +100,10 @@ export function placementsEqual(left, right) {
     && left.variant === right.variant
     && left.row === right.row
     && left.col === right.col;
+}
+
+export function areCluesPlaced(placements, clues = []) {
+  return clues.every((clue) => placements.some((placement) => placementsEqual(placement, clue)));
 }
 
 function buildAllPlacements() {
@@ -279,5 +286,5 @@ export function validateCompletedBoard(placements, clues = []) {
   if (placements.length !== PIECES.length) return false;
   const compiled = compileLockedPlacements(placements);
   if (!compiled || compiled.occupied.size !== BOARD_SIZE) return false;
-  return clues.every((clue) => placements.some((placement) => placementsEqual(placement, clue)));
+  return areCluesPlaced(placements, clues);
 }

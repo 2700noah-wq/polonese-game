@@ -5,6 +5,7 @@ import {
   BOARD_SIZE,
   DIFFICULTIES,
   PIECES,
+  areCluesPlaced,
   fixedLevelSeed,
   generatePuzzle,
   getVariants,
@@ -25,6 +26,18 @@ test("alle zehn Teile bestehen aus fünf Feldern und besitzen eindeutige Variant
 test("die höchste Schwierigkeit heißt Polonesisch", () => {
   assert.equal(DIFFICULTIES.expert.label, "Polonesisch");
   assert.equal(DIFFICULTIES.expert.targetClues, 4);
+});
+
+test("Teile am Rand werden nicht auf die Gegenseite umgebrochen", () => {
+  const visibleCells = placementCells({ pieceId: "l", variant: 0, row: 1, col: -1 });
+  assert.ok(visibleCells.length < 5);
+  assert.ok(visibleCells.every((cell) => cell >= 0 && cell < BOARD_SIZE));
+});
+
+test("die Vorlagenphase ist erst nach allen Pflichtteilen abgeschlossen", () => {
+  const puzzle = generatePuzzle(fixedLevelSeed("easy", 2), "easy");
+  assert.equal(areCluesPlaced(puzzle.clues.slice(0, -1), puzzle.clues), false);
+  assert.equal(areCluesPlaced(puzzle.clues, puzzle.clues), true);
 });
 
 test("feste Level sind deterministisch", () => {
