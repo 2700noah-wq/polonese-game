@@ -14,7 +14,7 @@ import {
   placementCells,
   placementsEqual,
   validateCompletedBoard,
-} from "./logic.js";
+} from "./logic.js?v=20260819-2";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
