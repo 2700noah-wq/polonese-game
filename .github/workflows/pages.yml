@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 22
       - name: Test puzzle logic
-        run: npm test
+        run: node --test tests/logic.test.mjs
 
   deploy:
     environment:
