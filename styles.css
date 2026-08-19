@@ -1000,6 +1000,17 @@ kbd {
   gap: 8px;
 }
 
+.storage-note {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  font-size: 0.68rem;
+  line-height: 1.55;
+}
+
 .difficulty-stat-row {
   display: grid;
   grid-template-columns: 80px 1fr auto;

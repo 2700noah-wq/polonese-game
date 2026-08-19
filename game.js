@@ -560,7 +560,8 @@ function renderStats() {
   DIFFICULTY_ORDER.forEach((difficulty) => {
     const solved = stats.completed[difficulty].length;
     const row = document.createElement("div");
-    row.innerHTML = `<span>${DIFFICULTIES[difficulty].label}</span><div><i style="width:${(solved / FIXED_LEVELS_PER_DIFFICULTY) * 100}%"></i></div><strong>${solved}/${FIXED_LEVELS_PER_DIFFICULTY}</strong>`;
+    row.className = "difficulty-stat-row";
+    row.innerHTML = `<span>${DIFFICULTIES[difficulty].label}</span><div class="bar"><i style="width:${(solved / FIXED_LEVELS_PER_DIFFICULTY) * 100}%"></i></div><small>${solved}/${FIXED_LEVELS_PER_DIFFICULTY}</small>`;
     elements.difficultyStats.append(row);
   });
 }

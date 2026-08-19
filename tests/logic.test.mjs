@@ -22,6 +22,11 @@ test("alle zehn Teile bestehen aus fünf Feldern und besitzen eindeutige Variant
   }
 });
 
+test("die höchste Schwierigkeit heißt Polonesisch", () => {
+  assert.equal(DIFFICULTIES.expert.label, "Polonesisch");
+  assert.equal(DIFFICULTIES.expert.targetClues, 4);
+});
+
 test("feste Level sind deterministisch", () => {
   const first = generatePuzzle(fixedLevelSeed("medium", 17), "medium");
   const second = generatePuzzle(fixedLevelSeed("medium", 17), "medium");

@@ -7,7 +7,7 @@ export const DIFFICULTIES = {
   easy: { label: "Leicht", targetClues: 7, description: "Viele Vorgaben, ideal zum Einsteigen" },
   medium: { label: "Mittel", targetClues: 6, description: "Mehr Raum zum Kombinieren" },
   hard: { label: "Schwer", targetClues: 5, description: "Wenige Vorgaben, viele Möglichkeiten" },
-  expert: { label: "Expert", targetClues: 4, description: "Minimale Hilfe für Puzzle-Profis" },
+  expert: { label: "Polonesisch", targetClues: 4, description: "Minimale Hilfe für echte Polonese-Profis" },
 };
 
 export const PIECES = [
@@ -281,4 +281,3 @@ export function validateCompletedBoard(placements, clues = []) {
   if (!compiled || compiled.occupied.size !== BOARD_SIZE) return false;
   return clues.every((clue) => placements.some((placement) => placementsEqual(placement, clue)));
 }
-
