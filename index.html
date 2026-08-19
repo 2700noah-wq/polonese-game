@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#d90429" />
+    <meta name="description" content="Polonese – das farbenfrohe Online-Logikspiel mit festen Levels und Endlosmodus." />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>Polonese – Puzzle das Feld voll</title>
+  </head>
+  <body data-theme="polish">
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Polonese Startseite">
+        <span class="brand-mark" aria-hidden="true">
+          <i></i><i></i><i></i><i></i>
+        </span>
+        <span>
+          <strong>POLONESE</strong>
+          <small>PUZZLE DAS FELD VOLL</small>
+        </span>
+      </a>
+      <div class="top-actions">
+        <button class="icon-button" id="themeButton" type="button" title="Design wechseln" aria-label="Design wechseln">◐</button>
+        <button class="stats-button" id="statsButton" type="button">
+          <span>Statistik</span>
+          <strong id="headerSolved">0</strong>
+        </button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <aside class="side-panel">
+        <section class="panel-section">
+          <p class="eyebrow">Spielmodus</p>
+          <div class="segmented" id="modeSelector">
+            <button class="active" type="button" data-mode="fixed">Level</button>
+            <button type="button" data-mode="endless">Endlos</button>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-title-row">
+            <p class="eyebrow">Schwierigkeit</p>
+            <span id="difficultyHint">Viele Vorgaben</span>
+          </div>
+          <div class="difficulty-grid" id="difficultySelector">
+            <button class="active" type="button" data-difficulty="easy"><i></i>Leicht</button>
+            <button type="button" data-difficulty="medium"><i></i>Mittel</button>
+            <button type="button" data-difficulty="hard"><i></i>Schwer</button>
+            <button type="button" data-difficulty="expert"><i></i>Expert</button>
+          </div>
+        </section>
+
+        <section class="panel-section level-section" id="fixedLevelControls">
+          <div class="section-title-row">
+            <p class="eyebrow">Aufgabe</p>
+            <span id="levelProgressText">0 / 60 geschafft</span>
+          </div>
+          <div class="level-nav">
+            <button id="previousLevel" type="button" aria-label="Vorheriges Level">←</button>
+            <div>
+              <span>LEVEL</span>
+              <strong id="levelNumber">01</strong>
+              <small>/ 60</small>
+            </div>
+            <button id="nextLevel" type="button" aria-label="Nächstes Level">→</button>
+          </div>
+          <div class="progress-track"><span id="progressBar"></span></div>
+        </section>
+
+        <section class="panel-section endless-section hidden" id="endlessControls">
+          <p class="eyebrow">Endlos-Aufgabe</p>
+          <strong id="endlessRound">Runde 1</strong>
+          <button class="secondary-button" id="newEndlessButton" type="button">Neue Aufgabe erzeugen</button>
+        </section>
+
+        <section class="quick-stats">
+          <div><span>Aktuelle Zeit</span><strong id="timer">00:00</strong></div>
+          <div><span>Bestzeit</span><strong id="bestTime">–</strong></div>
+        </section>
+
+        <button class="how-button" id="howButton" type="button">Wie wird gespielt?</button>
+      </aside>
+
+      <section class="game-panel">
+        <div class="game-heading">
+          <div>
+            <p class="eyebrow">Deine Herausforderung</p>
+            <h1>Fülle jedes Feld.</h1>
+            <p>Setze zuerst die Teile aus der Vorlage ein. Ergänze danach den Rest – ohne Lücken und ohne Überlappungen.</p>
+          </div>
+          <div class="clue-count"><span>Vorlagen</span><strong id="clueCount">0</strong></div>
+        </div>
+
+        <div class="workspace">
+          <section class="template-card">
+            <div class="card-heading">
+              <div><span class="status-dot"></span><strong>Vorlage</strong></div>
+              <small>Diese Positionen sind Pflicht</small>
+            </div>
+            <div class="template-board" id="templateBoard" aria-label="Vorlage der aktuellen Aufgabe"></div>
+            <div class="template-legend" id="templateLegend"></div>
+          </section>
+
+          <section class="board-card">
+            <div class="board-toolbar">
+              <div>
+                <span class="status-dot live"></span>
+                <strong>Spielfeld</strong>
+                <small id="placedCounter">0 / 10 Teile</small>
+              </div>
+              <div class="board-actions">
+                <button id="undoButton" type="button" title="Rückgängig">↶</button>
+                <button id="resetButton" type="button" title="Neu beginnen">↺</button>
+              </div>
+            </div>
+            <div class="board-wrap">
+              <div class="game-board" id="gameBoard" role="grid" aria-label="Spielfeld mit fünf Reihen und zehn Spalten"></div>
+            </div>
+            <p class="board-message" id="boardMessage">Wähle unten ein Teil aus und tippe auf das Spielfeld.</p>
+          </section>
+        </div>
+
+        <section class="tray-section">
+          <div class="tray-heading">
+            <div>
+              <p class="eyebrow">Deine Spielsteine</p>
+              <h2 id="selectedPieceLabel">Teil auswählen</h2>
+            </div>
+            <div class="piece-actions">
+              <button id="rotateButton" type="button"><span>↻</span> Drehen <kbd>R</kbd></button>
+              <button id="flipButton" type="button"><span>⇋</span> Spiegeln <kbd>F</kbd></button>
+            </div>
+          </div>
+          <div class="piece-tray" id="pieceTray"></div>
+        </section>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <dialog class="modal" id="winDialog">
+      <div class="celebration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <button class="modal-close" data-close="winDialog" type="button" aria-label="Fenster schließen">×</button>
+      <p class="eyebrow">Aufgabe geschafft</p>
+      <h2>Perfekt eingepasst!</h2>
+      <p>Jedes Feld ist belegt und alle Vorlagen stimmen.</p>
+      <div class="result-grid">
+        <div><span>Zeit</span><strong id="resultTime">00:00</strong></div>
+        <div><span>Bestzeit</span><strong id="resultBest">00:00</strong></div>
+      </div>
+      <button class="primary-button" id="continueButton" type="button">Nächste Aufgabe</button>
+    </dialog>
+
+    <dialog class="modal wide" id="statsDialog">
+      <button class="modal-close" data-close="statsDialog" type="button" aria-label="Fenster schließen">×</button>
+      <p class="eyebrow">Dein Fortschritt</p>
+      <h2>Polonese-Statistik</h2>
+      <div class="stats-grid">
+        <div><span>Gelöste Aufgaben</span><strong id="statsSolved">0</strong></div>
+        <div><span>Endlos-Runden</span><strong id="statsEndless">0</strong></div>
+        <div><span>Gesamte Spielzeit</span><strong id="statsPlayTime">00:00</strong></div>
+        <div><span>Feste Levels</span><strong id="statsPercent">0 %</strong></div>
+      </div>
+      <div class="difficulty-stats" id="difficultyStats"></div>
+    </dialog>
+
+    <dialog class="modal wide" id="howDialog">
+      <button class="modal-close" data-close="howDialog" type="button" aria-label="Fenster schließen">×</button>
+      <p class="eyebrow">Kurzanleitung</p>
+      <h2>So funktioniert Polonese</h2>
+      <ol class="how-list">
+        <li><strong>Vorlage ansehen</strong><span>Die markierten Teile müssen genau an den gezeigten Positionen liegen.</span></li>
+        <li><strong>Teil auswählen</strong><span>Tippe auf einen Spielstein. Mit Drehen und Spiegeln änderst du seine Form.</span></li>
+        <li><strong>Auf das Feld setzen</strong><span>Tippe auf ein freies Feld. Ein gesetztes Teil kannst du antippen und erneut platzieren.</span></li>
+        <li><strong>Alles ausfüllen</strong><span>Gewonnen hast du, wenn alle zehn Teile lückenlos auf dem Brett liegen.</span></li>
+      </ol>
+    </dialog>
+
+    <script type="module" src="./game.js"></script>
+  </body>
+</html>
