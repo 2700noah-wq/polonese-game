@@ -674,15 +674,13 @@ h2 {
   opacity: 0.65;
 }
 
-.board-cell.preview-valid {
-  background: color-mix(in srgb, var(--selected-color) 45%, var(--board-cell));
+.board-cell.preview-piece {
+  background:
+    radial-gradient(circle at 34% 27%, rgba(255, 255, 255, 0.76), transparent 16%),
+    radial-gradient(circle at 48% 44%, color-mix(in srgb, var(--selected-color) 72%, transparent) 0 46%, color-mix(in srgb, var(--selected-color) 50%, var(--board-cell)) 88%);
   border-color: var(--selected-color);
   transform: scale(1.04);
-}
-
-.board-cell.preview-invalid {
-  background: rgba(255, 45, 75, 0.24);
-  border-color: #ff2d4b;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--selected-color) 24%, transparent);
 }
 
 .board-message {

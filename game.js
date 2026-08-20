@@ -454,7 +454,7 @@ function renderBoard() {
       button.setAttribute("aria-label", `Feld ${index + 1}`);
     }
     if (previewCells.has(index)) {
-      button.classList.add(state.preview.valid ? "preview-valid" : "preview-invalid");
+      button.classList.add("preview-piece");
       button.style.setProperty("--selected-color", getPiece(state.preview.placement.pieceId).color);
     }
     elements.gameBoard.append(button);
@@ -646,7 +646,7 @@ elements.gameBoard.addEventListener("mouseover", (event) => {
   const placement = candidateFromCell(Number(cell.dataset.cell));
   const key = `${placement.pieceId}:${placement.variant}:${placement.row}:${placement.col}`;
   if (state.preview?.key === key) return;
-  state.preview = { key, placement, valid: validateCandidate(placement).valid };
+  state.preview = { key, placement };
   renderBoard();
 });
 
