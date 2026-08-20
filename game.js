@@ -15,6 +15,7 @@ import {
   placementsEqual,
   validateCompletedBoard,
 } from "./logic.js?v=20260819-2";
+import { createLevelPickerItems } from "./level-picker.js?v=20260820-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -28,6 +29,7 @@ const elements = {
   endlessControls: document.querySelector("#endlessControls"),
   previousLevel: document.querySelector("#previousLevel"),
   nextLevel: document.querySelector("#nextLevel"),
+  levelPickerButton: document.querySelector("#levelPickerButton"),
   levelNumber: document.querySelector("#levelNumber"),
   levelProgressText: document.querySelector("#levelProgressText"),
   progressBar: document.querySelector("#progressBar"),
@@ -56,6 +58,10 @@ const elements = {
   howButton: document.querySelector("#howButton"),
   toast: document.querySelector("#toast"),
   winDialog: document.querySelector("#winDialog"),
+  levelPickerDialog: document.querySelector("#levelPickerDialog"),
+  levelPickerDifficulty: document.querySelector("#levelPickerDifficulty"),
+  levelPickerProgress: document.querySelector("#levelPickerProgress"),
+  levelPickerGrid: document.querySelector("#levelPickerGrid"),
   statsDialog: document.querySelector("#statsDialog"),
   howDialog: document.querySelector("#howDialog"),
   resultTime: document.querySelector("#resultTime"),
@@ -601,6 +607,7 @@ function renderStatus() {
   elements.fixedLevelControls.classList.toggle("hidden", state.mode !== "fixed");
   elements.endlessControls.classList.toggle("hidden", state.mode !== "endless");
   elements.levelNumber.textContent = String(state.levelIndex + 1).padStart(2, "0");
+  elements.levelPickerButton.setAttribute("aria-label", `Level ${state.levelIndex + 1} auswählen`);
   elements.levelProgressText.textContent = `${completed.length} / ${FIXED_LEVELS_PER_DIFFICULTY} geschafft`;
   elements.progressBar.style.width = `${(completed.length / FIXED_LEVELS_PER_DIFFICULTY) * 100}%`;
   elements.previousLevel.disabled = state.levelIndex === 0;
@@ -631,6 +638,38 @@ function renderStats() {
   });
 }
 
+function renderLevelPicker() {
+  const completed = stats.completed[state.difficulty];
+  const items = createLevelPickerItems(
+    FIXED_LEVELS_PER_DIFFICULTY,
+    state.levelIndex,
+    completed,
+  );
+
+  elements.levelPickerDifficulty.textContent = DIFFICULTIES[state.difficulty].label;
+  elements.levelPickerProgress.textContent = `${completed.length} von ${FIXED_LEVELS_PER_DIFFICULTY} geschafft`;
+  elements.levelPickerGrid.setAttribute(
+    "aria-label",
+    `${DIFFICULTIES[state.difficulty].label}: Level 1 bis ${FIXED_LEVELS_PER_DIFFICULTY}`,
+  );
+  elements.levelPickerGrid.replaceChildren();
+
+  items.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.levelIndex = String(item.index);
+    button.textContent = String(item.number);
+    button.classList.toggle("completed", item.completed);
+    button.classList.toggle("current", item.current);
+    button.setAttribute("aria-current", item.current ? "page" : "false");
+    button.setAttribute(
+      "aria-label",
+      `Level ${item.number}${item.current ? ", aktuell" : ""}${item.completed ? ", geschafft" : ""}`,
+    );
+    elements.levelPickerGrid.append(button);
+  });
+}
+
 function renderAll() {
   renderTemplate();
   renderBoard();
@@ -656,6 +695,16 @@ function moveLevel(delta) {
   if (next === state.levelIndex) return;
   state.levelIndex = next;
   stats.currentLevel[state.difficulty] = next;
+  saveStats();
+  loadPuzzle();
+}
+
+function chooseLevel(levelIndex) {
+  if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= FIXED_LEVELS_PER_DIFFICULTY) return;
+  elements.levelPickerDialog.close();
+  if (levelIndex === state.levelIndex) return;
+  state.levelIndex = levelIndex;
+  stats.currentLevel[state.difficulty] = levelIndex;
   saveStats();
   loadPuzzle();
 }
@@ -848,6 +897,15 @@ elements.difficultySelector.addEventListener("click", (event) => {
 
 elements.previousLevel.addEventListener("click", () => moveLevel(-1));
 elements.nextLevel.addEventListener("click", () => moveLevel(1));
+elements.levelPickerButton.addEventListener("click", () => {
+  renderLevelPicker();
+  openDialog(elements.levelPickerDialog);
+});
+elements.levelPickerGrid.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-level-index]");
+  if (!button) return;
+  chooseLevel(Number(button.dataset.levelIndex));
+});
 elements.newEndlessButton.addEventListener("click", () => nextEndlessPuzzle(true));
 elements.undoButton.addEventListener("click", undo);
 elements.resetButton.addEventListener("click", resetBoard);
