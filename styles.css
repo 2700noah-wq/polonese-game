@@ -58,6 +58,7 @@ input {
 
 button {
   color: inherit;
+  touch-action: manipulation;
 }
 
 button:focus-visible,
@@ -1219,8 +1220,16 @@ kbd {
   }
 
   .piece-actions button {
+    min-width: 44px;
+    min-height: 44px;
     padding: 8px;
     font-size: 0;
+  }
+
+  .board-actions button,
+  .stats-button {
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .piece-actions button span {
@@ -1245,6 +1254,14 @@ kbd {
 
   .modal {
     padding: 28px 20px;
+  }
+}
+
+@media (hover: none) {
+  .board-cell:hover,
+  .piece-card:hover:not(.placed),
+  .piece-card.selected {
+    transform: none;
   }
 }
 
