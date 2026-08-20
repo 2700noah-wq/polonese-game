@@ -834,6 +834,40 @@ kbd {
   font-size: 0.48rem;
 }
 
+.drag-ghost {
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
+  filter: drop-shadow(0 10px 14px color-mix(in srgb, var(--piece-color) 35%, transparent));
+}
+
+.drag-ghost i {
+  position: absolute;
+  width: var(--drag-unit);
+  height: var(--drag-unit);
+  border: 2px solid color-mix(in srgb, var(--piece-color) 72%, white);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 27%, rgba(255, 255, 255, 0.92), transparent 16%),
+    radial-gradient(circle at 48% 44%, var(--piece-color) 0 46%, color-mix(in srgb, var(--piece-color) 66%, #07030b) 88%);
+  box-shadow: inset -3px -5px 9px rgba(20, 4, 10, 0.2);
+  opacity: 0.9;
+}
+
+body.dragging-piece {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body.dragging-piece .board-wrap {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 3px;
+}
+
+.mobile-action-bar {
+  display: none;
+}
+
 .hidden {
   display: none !important;
 }
@@ -1135,6 +1169,10 @@ kbd {
 }
 
 @media (max-width: 640px) {
+  body.piece-selected {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
   .topbar,
   .app-shell {
     width: min(100% - 22px, 1520px);
@@ -1209,6 +1247,7 @@ kbd {
 
   .game-board {
     gap: 3px;
+    touch-action: none;
   }
 
   .tray-heading {
@@ -1216,14 +1255,7 @@ kbd {
   }
 
   .piece-actions {
-    gap: 4px;
-  }
-
-  .piece-actions button {
-    min-width: 44px;
-    min-height: 44px;
-    padding: 8px;
-    font-size: 0;
+    display: none;
   }
 
   .board-actions button,
@@ -1232,20 +1264,107 @@ kbd {
     min-height: 44px;
   }
 
-  .piece-actions button span {
-    font-size: 1rem;
-  }
-
-  .piece-actions kbd {
-    display: none;
-  }
-
   .piece-tray {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(122px, 39vw);
+    gap: 10px;
+    padding: 2px 2px 10px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-padding-inline: 2px;
+    scroll-snap-type: inline proximity;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
   }
 
   .piece-card {
-    min-height: 96px;
+    min-height: 112px;
+    scroll-snap-align: start;
+    touch-action: pan-x;
+  }
+
+  .piece-card strong {
+    font-size: 0.68rem;
+  }
+
+  .piece-card small {
+    font-size: 0.56rem;
+  }
+
+  .mobile-action-bar:not(.hidden) {
+    position: fixed;
+    right: 11px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: 11px;
+    z-index: 70;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 68px 76px 48px;
+    gap: 6px;
+    align-items: stretch;
+    padding: 8px;
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 18px 45px rgba(50, 10, 20, 0.24);
+    backdrop-filter: blur(16px);
+  }
+
+  .mobile-selection {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 5px;
+  }
+
+  .mobile-selection small,
+  .mobile-selection strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-selection small {
+    color: var(--muted);
+    font-size: 0.5rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .mobile-selection strong {
+    margin-top: 2px;
+    font-size: 0.72rem;
+  }
+
+  .mobile-action-bar button {
+    min-width: 0;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel-soft);
+    color: var(--ink);
+    font-size: 0.62rem;
+    font-weight: 800;
+  }
+
+  .mobile-action-bar button span {
+    color: var(--accent);
+    font-size: 1rem;
+  }
+
+  .mobile-action-bar .mobile-cancel {
+    color: var(--accent);
+    font-size: 1.35rem;
+  }
+
+  body.piece-selected .toast {
+    bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
   .stats-grid {

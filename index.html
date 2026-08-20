@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#d90429" />
     <meta name="description" content="Polonese – das farbenfrohe Online-Logikspiel mit festen Levels und Endlosmodus." />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260820-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260820-3" />
     <title>Polonese – Puzzle das Feld voll</title>
   </head>
   <body data-theme="polish">
@@ -119,7 +119,7 @@
             <div class="board-wrap">
               <div class="game-board" id="gameBoard" role="grid" aria-label="Spielfeld mit fünf Reihen und zehn Spalten"></div>
             </div>
-            <p class="board-message" id="boardMessage">Wähle unten ein Teil aus und tippe auf das Spielfeld.</p>
+            <p class="board-message" id="boardMessage">Wähle unten einen Stein aus und tippe auf das Spielfeld – oder ziehe ihn direkt hinein.</p>
           </section>
         </div>
 
@@ -140,6 +140,16 @@
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <div class="mobile-action-bar hidden" id="mobileActionBar" aria-label="Bedienung des ausgewählten Spielsteins">
+      <div class="mobile-selection">
+        <small>Ausgewählt</small>
+        <strong id="mobileSelectedPieceLabel">Kein Teil</strong>
+      </div>
+      <button id="mobileRotateButton" type="button"><span>↻</span>Drehen</button>
+      <button id="mobileFlipButton" type="button"><span>⇋</span>Spiegeln</button>
+      <button class="mobile-cancel" id="mobileCancelButton" type="button" aria-label="Auswahl aufheben">×</button>
+    </div>
 
     <dialog class="modal" id="winDialog">
       <div class="celebration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -174,12 +184,12 @@
       <h2>So funktioniert Polonese</h2>
       <ol class="how-list">
         <li><strong>Vorlage ansehen</strong><span>Die markierten Teile müssen genau an den gezeigten Positionen liegen.</span></li>
-        <li><strong>Teil auswählen</strong><span>Tippe auf einen Spielstein. Mit Drehen und Spiegeln änderst du seine Form.</span></li>
-        <li><strong>Auf das Feld setzen</strong><span>Tippe auf ein freies Feld. Ein gesetztes Teil kannst du antippen und erneut platzieren.</span></li>
+        <li><strong>Teil auswählen</strong><span>Tippe auf einen Spielstein. Am Handy bleiben Drehen und Spiegeln unten immer erreichbar.</span></li>
+        <li><strong>Auf das Feld setzen</strong><span>Tippe auf ein freies Feld oder ziehe den Stein direkt hinein. Gesetzte Steine lassen sich ebenfalls verschieben.</span></li>
         <li><strong>Alles ausfüllen</strong><span>Gewonnen hast du, wenn alle zehn Teile lückenlos auf dem Brett liegen.</span></li>
       </ol>
     </dialog>
 
-    <script type="module" src="./game.js?v=20260820-1"></script>
+    <script type="module" src="./game.js?v=20260820-2"></script>
   </body>
 </html>

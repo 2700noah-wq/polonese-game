@@ -46,6 +46,11 @@ const elements = {
   selectedPieceLabel: document.querySelector("#selectedPieceLabel"),
   rotateButton: document.querySelector("#rotateButton"),
   flipButton: document.querySelector("#flipButton"),
+  mobileActionBar: document.querySelector("#mobileActionBar"),
+  mobileSelectedPieceLabel: document.querySelector("#mobileSelectedPieceLabel"),
+  mobileRotateButton: document.querySelector("#mobileRotateButton"),
+  mobileFlipButton: document.querySelector("#mobileFlipButton"),
+  mobileCancelButton: document.querySelector("#mobileCancelButton"),
   statsButton: document.querySelector("#statsButton"),
   headerSolved: document.querySelector("#headerSolved"),
   howButton: document.querySelector("#howButton"),
@@ -115,12 +120,19 @@ const state = {
   flipped: false,
   history: [],
   preview: null,
+  pickedUpPieceId: null,
   startedAt: performance.now(),
   elapsedSeconds: 0,
   solved: false,
 };
 
 let toastTimeout;
+let dragSession = null;
+let dragGhost = null;
+let suppressClickUntil = 0;
+
+const DRAG_THRESHOLD = 8;
+const TOUCH_PREVIEW_LIFT = 44;
 
 function saveStats() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
@@ -196,6 +208,7 @@ function loadPuzzle() {
   state.flipped = false;
   state.history = [];
   state.preview = null;
+  state.pickedUpPieceId = null;
   state.elapsedSeconds = 0;
   state.startedAt = performance.now();
   const seed = state.mode === "fixed"
@@ -222,12 +235,24 @@ function reservedOwnerAtCell(cellIndex) {
   return state.puzzle.clues.find((clue) => placementCells(clue).includes(cellIndex))?.pieceId ?? null;
 }
 
-function candidateFromCell(cellIndex) {
+function variantCenterCell(cells) {
+  const maxRow = Math.max(...cells.map(([row]) => row));
+  const maxCol = Math.max(...cells.map(([, col]) => col));
+  const centerRow = maxRow / 2;
+  const centerCol = maxCol / 2;
+  return cells.reduce((best, cell) => {
+    const distance = ((cell[0] - centerRow) ** 2) + ((cell[1] - centerCol) ** 2);
+    const bestDistance = ((best[0] - centerRow) ** 2) + ((best[1] - centerCol) ** 2);
+    return distance < bestDistance ? cell : best;
+  }, cells[0]);
+}
+
+function candidateFromCell(cellIndex, anchorCell = null) {
   const variant = selectedVariant();
   if (!variant) return null;
   const clickedRow = Math.floor(cellIndex / BOARD_COLS);
   const clickedCol = cellIndex % BOARD_COLS;
-  const [anchorRow, anchorCol] = variant.cells[0];
+  const [anchorRow, anchorCol] = anchorCell ?? variantCenterCell(variant.cells);
   return {
     pieceId: state.selectedPieceId,
     variant: variant.index,
@@ -267,6 +292,13 @@ function validateCandidate(candidate) {
 
 function selectPiece(pieceId) {
   if (state.solved) return;
+  if (state.selectedPieceId === pieceId && !state.placed.has(pieceId)) {
+    setBoardMessage(`${getPiece(pieceId).name} ist bereits ausgewählt. Tippe auf das Feld oder ziehe den Stein.`);
+    return;
+  }
+  if (state.pickedUpPieceId && state.pickedUpPieceId !== pieceId) {
+    cancelSelection({ restorePickedUp: true });
+  }
   if (state.placed.has(pieceId)) {
     pickUpPiece(pieceId);
     return;
@@ -281,7 +313,8 @@ function selectPiece(pieceId) {
   state.rotation = 0;
   state.flipped = false;
   state.preview = null;
-  setBoardMessage(`${getPiece(pieceId).name} ist ausgewählt. Tippe auf ein Feld.`);
+  state.pickedUpPieceId = null;
+  setBoardMessage(`${getPiece(pieceId).name} ist ausgewählt. Tippe auf das Feld oder ziehe den Stein hinein.`);
   renderBoard();
   renderTray();
 }
@@ -296,10 +329,30 @@ function pickUpPiece(pieceId) {
   state.rotation = transform.rotation;
   state.flipped = transform.flipped;
   state.preview = null;
+  state.pickedUpPieceId = pieceId;
   setBoardMessage(`${getPiece(pieceId).name} aufgenommen. Setze es neu.`);
   renderBoard();
   renderTray();
   renderStatus();
+}
+
+function placeCandidate(candidate) {
+  const wasPickedUp = state.pickedUpPieceId === candidate.pieceId;
+  if (!wasPickedUp) pushHistory();
+  state.placed.set(candidate.pieceId, candidate);
+  state.selectedPieceId = null;
+  state.preview = null;
+  state.pickedUpPieceId = null;
+  state.rotation = 0;
+  state.flipped = false;
+  const templateFinished = cluePhaseComplete();
+  setBoardMessage(templateFinished
+    ? "Vorlage vollständig! Jetzt kannst du die übrigen Teile einsetzen."
+    : "Passt! Lege das nächste Vorlagen-Teil auf.");
+  renderBoard();
+  renderTray();
+  renderStatus();
+  checkWin();
 }
 
 function placeSelected(cellIndex) {
@@ -315,20 +368,25 @@ function placeSelected(cellIndex) {
     return;
   }
 
-  pushHistory();
-  state.placed.set(candidate.pieceId, candidate);
+  placeCandidate(candidate);
+}
+
+function cancelSelection({ restorePickedUp = true } = {}) {
+  if (!state.selectedPieceId) return;
+  if (restorePickedUp && state.pickedUpPieceId === state.selectedPieceId && state.history.length) {
+    restorePlacements(state.history.pop());
+    setBoardMessage("Der Spielstein liegt wieder an seiner vorherigen Position.");
+  } else {
+    setBoardMessage("Auswahl aufgehoben.");
+  }
   state.selectedPieceId = null;
   state.preview = null;
+  state.pickedUpPieceId = null;
   state.rotation = 0;
   state.flipped = false;
-  const templateFinished = cluePhaseComplete();
-  setBoardMessage(templateFinished
-    ? "Vorlage vollständig! Jetzt kannst du die übrigen Teile einsetzen."
-    : "Passt! Lege das nächste Vorlagen-Teil auf.");
   renderBoard();
   renderTray();
   renderStatus();
-  checkWin();
 }
 
 function rotateSelected() {
@@ -352,6 +410,7 @@ function undo() {
   restorePlacements(state.history.pop());
   state.selectedPieceId = null;
   state.preview = null;
+  state.pickedUpPieceId = null;
   state.rotation = 0;
   state.flipped = false;
   setBoardMessage("Letzten Zug rückgängig gemacht.");
@@ -366,6 +425,7 @@ function resetBoard() {
   state.placed.clear();
   state.selectedPieceId = null;
   state.preview = null;
+  state.pickedUpPieceId = null;
   state.rotation = 0;
   state.flipped = false;
   state.startedAt = performance.now();
@@ -517,6 +577,12 @@ function renderTray() {
   elements.selectedPieceLabel.textContent = selected ? `${selected.name} ausgewählt` : "Teil auswählen";
   elements.rotateButton.disabled = !selected;
   elements.flipButton.disabled = !selected;
+  elements.mobileSelectedPieceLabel.textContent = selected?.name ?? "Kein Teil";
+  elements.mobileRotateButton.disabled = !selected;
+  elements.mobileFlipButton.disabled = !selected;
+  elements.mobileCancelButton.disabled = !selected;
+  elements.mobileActionBar.classList.toggle("hidden", !selected);
+  elements.body.classList.toggle("piece-selected", Boolean(selected));
 }
 
 function renderStatus() {
@@ -601,6 +667,167 @@ function nextEndlessPuzzle(incrementRound = true) {
   loadPuzzle();
 }
 
+function boardCellFromPoint(clientX, clientY, pointerType) {
+  const boardRect = elements.gameBoard.getBoundingClientRect();
+  let targetY = clientY;
+  if (pointerType === "touch") {
+    const liftedY = clientY - TOUCH_PREVIEW_LIFT;
+    if (liftedY >= boardRect.top && liftedY <= boardRect.bottom) targetY = liftedY;
+  }
+  if (
+    clientX < boardRect.left
+    || clientX > boardRect.right
+    || targetY < boardRect.top
+    || targetY > boardRect.bottom
+  ) return null;
+
+  let nearest = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  elements.gameBoard.querySelectorAll("[data-cell]").forEach((cell) => {
+    const rect = cell.getBoundingClientRect();
+    const distance = ((clientX - (rect.left + rect.width / 2)) ** 2)
+      + ((targetY - (rect.top + rect.height / 2)) ** 2);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = Number(cell.dataset.cell);
+    }
+  });
+  return nearest;
+}
+
+function createDragGhost(pieceId, anchorCell) {
+  dragGhost?.remove();
+  const variant = selectedVariant();
+  if (!variant) return;
+  const boardCell = elements.gameBoard.querySelector(".board-cell");
+  const boardUnit = boardCell?.getBoundingClientRect().width ?? 28;
+  const unit = Math.max(22, Math.min(34, boardUnit));
+  const maxRow = Math.max(...variant.cells.map(([row]) => row));
+  const maxCol = Math.max(...variant.cells.map(([, col]) => col));
+  dragGhost = document.createElement("div");
+  dragGhost.className = "drag-ghost";
+  dragGhost.style.setProperty("--piece-color", getPiece(pieceId).color);
+  dragGhost.style.setProperty("--drag-unit", `${unit}px`);
+  dragGhost.style.width = `${(maxCol + 1) * unit}px`;
+  dragGhost.style.height = `${(maxRow + 1) * unit}px`;
+  dragGhost.dataset.anchorRow = String(anchorCell[0]);
+  dragGhost.dataset.anchorCol = String(anchorCell[1]);
+  variant.cells.forEach(([row, col]) => {
+    const ball = document.createElement("i");
+    ball.style.left = `${col * unit}px`;
+    ball.style.top = `${row * unit}px`;
+    dragGhost.append(ball);
+  });
+  document.body.append(dragGhost);
+}
+
+function moveDragGhost(clientX, clientY, pointerType) {
+  if (!dragGhost) return;
+  const unit = Number.parseFloat(getComputedStyle(dragGhost).getPropertyValue("--drag-unit"));
+  const anchorRow = Number(dragGhost.dataset.anchorRow);
+  const anchorCol = Number(dragGhost.dataset.anchorCol);
+  const lift = pointerType === "touch" ? TOUCH_PREVIEW_LIFT : 0;
+  dragGhost.style.left = `${clientX - ((anchorCol + 0.5) * unit)}px`;
+  dragGhost.style.top = `${clientY - lift - ((anchorRow + 0.5) * unit)}px`;
+}
+
+function beginPotentialDrag(event, pieceId, source, sourceCellIndex = null) {
+  if (state.solved || dragSession || (event.pointerType === "mouse" && event.button !== 0)) return;
+  dragSession = {
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
+    pieceId,
+    source,
+    sourceCellIndex,
+    startX: event.clientX,
+    startY: event.clientY,
+    active: false,
+    anchorCell: null,
+  };
+}
+
+function activateDrag(event) {
+  if (!dragSession || dragSession.active) return;
+  const originalPlacement = state.placed.get(dragSession.pieceId);
+  if (dragSession.source === "board" && originalPlacement) {
+    const boardRow = Math.floor(dragSession.sourceCellIndex / BOARD_COLS);
+    const boardCol = dragSession.sourceCellIndex % BOARD_COLS;
+    dragSession.anchorCell = [boardRow - originalPlacement.row, boardCol - originalPlacement.col];
+  }
+
+  if (state.selectedPieceId !== dragSession.pieceId || originalPlacement) {
+    selectPiece(dragSession.pieceId);
+  }
+  if (state.selectedPieceId !== dragSession.pieceId) {
+    dragSession = null;
+    return;
+  }
+
+  const variant = selectedVariant();
+  dragSession.anchorCell ??= variantCenterCell(variant.cells);
+  dragSession.active = true;
+  elements.body.classList.add("dragging-piece");
+  createDragGhost(dragSession.pieceId, dragSession.anchorCell);
+  moveDragGhost(event.clientX, event.clientY, dragSession.pointerType);
+}
+
+function updateActiveDrag(event) {
+  if (!dragSession?.active) return;
+  moveDragGhost(event.clientX, event.clientY, dragSession.pointerType);
+  const cellIndex = boardCellFromPoint(event.clientX, event.clientY, dragSession.pointerType);
+  const placement = cellIndex === null
+    ? null
+    : candidateFromCell(cellIndex, dragSession.anchorCell);
+  const key = placement
+    ? `${placement.pieceId}:${placement.variant}:${placement.row}:${placement.col}`
+    : "outside";
+  if (state.preview?.key !== key) {
+    state.preview = placement ? { key, placement } : null;
+    renderBoard();
+  }
+
+  if (dragSession.pointerType === "touch") {
+    const edge = 54;
+    if (event.clientY < edge) window.scrollBy(0, -12);
+    if (event.clientY > window.innerHeight - edge) window.scrollBy(0, 12);
+  }
+}
+
+function finishDrag(event, cancelled = false) {
+  if (!dragSession || event.pointerId !== dragSession.pointerId) return;
+  if (!dragSession.active) {
+    dragSession = null;
+    return;
+  }
+
+  if (!cancelled) updateActiveDrag(event);
+  const candidate = !cancelled ? state.preview?.placement : null;
+  const validation = candidate
+    ? validateCandidate(candidate)
+    : { valid: false, reason: "Ziehe den Stein vollständig auf das Spielfeld." };
+
+  dragGhost?.remove();
+  dragGhost = null;
+  elements.body.classList.remove("dragging-piece");
+  suppressClickUntil = performance.now() + 400;
+  dragSession = null;
+
+  if (validation.valid) {
+    placeCandidate(candidate);
+    return;
+  }
+
+  state.preview = null;
+  if (state.pickedUpPieceId === state.selectedPieceId) {
+    cancelSelection({ restorePickedUp: true });
+  } else {
+    setBoardMessage(cancelled ? "Der Stein bleibt ausgewählt." : validation.reason, !cancelled);
+    renderBoard();
+    renderTray();
+    if (!cancelled) showToast(validation.reason);
+  }
+}
+
 elements.modeSelector.addEventListener("click", (event) => {
   const button = event.target.closest("[data-mode]");
   if (!button || button.dataset.mode === state.mode) return;
@@ -625,13 +852,47 @@ elements.undoButton.addEventListener("click", undo);
 elements.resetButton.addEventListener("click", resetBoard);
 elements.rotateButton.addEventListener("click", rotateSelected);
 elements.flipButton.addEventListener("click", flipSelected);
+elements.mobileRotateButton.addEventListener("click", rotateSelected);
+elements.mobileFlipButton.addEventListener("click", flipSelected);
+elements.mobileCancelButton.addEventListener("click", () => cancelSelection({ restorePickedUp: true }));
+
+elements.pieceTray.addEventListener("pointerdown", (event) => {
+  const card = event.target.closest("[data-piece]");
+  if (!card || card.disabled) return;
+  beginPotentialDrag(event, card.dataset.piece, "tray");
+});
+
+elements.gameBoard.addEventListener("pointerdown", (event) => {
+  const cell = event.target.closest("[data-cell]");
+  if (!cell) return;
+  const cellIndex = Number(cell.dataset.cell);
+  const placed = placementAtCell(cellIndex);
+  if (placed) beginPotentialDrag(event, placed.pieceId, "board", cellIndex);
+});
+
+window.addEventListener("pointermove", (event) => {
+  if (!dragSession || event.pointerId !== dragSession.pointerId) return;
+  if (!dragSession.active) {
+    const distance = Math.hypot(event.clientX - dragSession.startX, event.clientY - dragSession.startY);
+    if (distance < DRAG_THRESHOLD) return;
+    activateDrag(event);
+  }
+  if (!dragSession?.active) return;
+  event.preventDefault();
+  updateActiveDrag(event);
+}, { passive: false });
+
+window.addEventListener("pointerup", (event) => finishDrag(event));
+window.addEventListener("pointercancel", (event) => finishDrag(event, true));
 
 elements.pieceTray.addEventListener("click", (event) => {
+  if (performance.now() < suppressClickUntil) return;
   const card = event.target.closest("[data-piece]");
   if (card) selectPiece(card.dataset.piece);
 });
 
 elements.gameBoard.addEventListener("click", (event) => {
+  if (performance.now() < suppressClickUntil) return;
   const cell = event.target.closest("[data-cell]");
   if (!cell) return;
   const cellIndex = Number(cell.dataset.cell);
@@ -641,6 +902,7 @@ elements.gameBoard.addEventListener("click", (event) => {
 });
 
 elements.gameBoard.addEventListener("mouseover", (event) => {
+  if (dragSession?.active) return;
   const cell = event.target.closest("[data-cell]");
   if (!cell || !state.selectedPieceId || state.solved) return;
   const placement = candidateFromCell(Number(cell.dataset.cell));
@@ -687,10 +949,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key.toLowerCase() === "r") rotateSelected();
   if (event.key.toLowerCase() === "f") flipSelected();
   if (event.key === "Escape" && state.selectedPieceId) {
-    state.selectedPieceId = null;
-    state.preview = null;
-    renderBoard();
-    renderTray();
+    cancelSelection({ restorePickedUp: true });
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
