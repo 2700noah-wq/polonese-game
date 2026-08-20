@@ -29,6 +29,7 @@ jobs:
         run: |
           node --check game.js
           node --check logic.js
+          node --check level-picker.js
 
       - name: Automatische Tests ausführen
-        run: node --test tests/logic.test.mjs
+        run: node --test tests/*.test.mjs
