@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#d90429" />
     <meta name="description" content="Polonese – das farbenfrohe Online-Logikspiel mit festen Levels und Endlosmodus." />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260820-4" />
+    <link rel="stylesheet" href="./styles.css?v=20260820-5" />
     <title>Polonese – Puzzle das Feld voll</title>
   </head>
   <body data-theme="polish">
@@ -60,13 +60,13 @@
             <span id="levelProgressText">0 / 60 geschafft</span>
           </div>
           <div class="level-nav">
-            <button id="previousLevel" type="button" aria-label="Vorheriges Level">←</button>
-            <div>
+            <button class="level-step-button" id="previousLevel" type="button" aria-label="Vorheriges Level">←</button>
+            <button class="level-picker-trigger" id="levelPickerButton" type="button" aria-haspopup="dialog" aria-controls="levelPickerDialog">
               <span>LEVEL</span>
               <strong id="levelNumber">01</strong>
-              <small>/ 60</small>
-            </div>
-            <button id="nextLevel" type="button" aria-label="Nächstes Level">→</button>
+              <small>von 60 · auswählen</small>
+            </button>
+            <button class="level-step-button" id="nextLevel" type="button" aria-label="Nächstes Level">→</button>
           </div>
           <div class="progress-track"><span id="progressBar"></span></div>
         </section>
@@ -164,6 +164,21 @@
       <button class="primary-button" id="continueButton" type="button">Nächste Aufgabe</button>
     </dialog>
 
+    <dialog class="modal wide level-picker-modal" id="levelPickerDialog">
+      <button class="modal-close" data-close="levelPickerDialog" type="button" aria-label="Levelauswahl schließen">×</button>
+      <p class="eyebrow">Aufgabenübersicht</p>
+      <h2>Level auswählen</h2>
+      <div class="level-picker-summary">
+        <strong id="levelPickerDifficulty">Leicht</strong>
+        <span id="levelPickerProgress">0 von 60 geschafft</span>
+      </div>
+      <div class="level-picker-legend" aria-label="Legende">
+        <span><i class="current"></i>Aktuelles Level</span>
+        <span><i class="completed"></i>Geschafft</span>
+      </div>
+      <div class="level-picker-grid" id="levelPickerGrid" aria-label="Verfügbare Levels"></div>
+    </dialog>
+
     <dialog class="modal wide" id="statsDialog">
       <button class="modal-close" data-close="statsDialog" type="button" aria-label="Fenster schließen">×</button>
       <p class="eyebrow">Dein Fortschritt</p>
@@ -190,6 +205,6 @@
       </ol>
     </dialog>
 
-    <script type="module" src="./game.js?v=20260820-3"></script>
+    <script type="module" src="./game.js?v=20260820-4"></script>
   </body>
 </html>
