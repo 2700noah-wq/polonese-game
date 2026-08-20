@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#d90429" />
     <meta name="description" content="Polonese – das farbenfrohe Online-Logikspiel mit festen Levels und Endlosmodus." />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260820-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260820-4" />
     <title>Polonese – Puzzle das Feld voll</title>
   </head>
   <body data-theme="polish">
@@ -141,14 +141,14 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <div class="mobile-action-bar hidden" id="mobileActionBar" aria-label="Bedienung des ausgewählten Spielsteins">
+    <div class="mobile-action-bar" id="mobileActionBar" aria-label="Bedienung des ausgewählten Spielsteins">
       <div class="mobile-selection">
         <small>Ausgewählt</small>
         <strong id="mobileSelectedPieceLabel">Kein Teil</strong>
       </div>
-      <button id="mobileRotateButton" type="button"><span>↻</span>Drehen</button>
-      <button id="mobileFlipButton" type="button"><span>⇋</span>Spiegeln</button>
-      <button class="mobile-cancel" id="mobileCancelButton" type="button" aria-label="Auswahl aufheben">×</button>
+      <button id="mobileRotateButton" type="button" disabled><span>↻</span>Drehen</button>
+      <button id="mobileFlipButton" type="button" disabled><span>⇋</span>Spiegeln</button>
+      <button class="mobile-cancel" id="mobileCancelButton" type="button" aria-label="Auswahl aufheben" disabled>×</button>
     </div>
 
     <dialog class="modal" id="winDialog">
@@ -190,6 +190,6 @@
       </ol>
     </dialog>
 
-    <script type="module" src="./game.js?v=20260820-2"></script>
+    <script type="module" src="./game.js?v=20260820-3"></script>
   </body>
 </html>

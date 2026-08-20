@@ -581,7 +581,8 @@ function renderTray() {
   elements.mobileRotateButton.disabled = !selected;
   elements.mobileFlipButton.disabled = !selected;
   elements.mobileCancelButton.disabled = !selected;
-  elements.mobileActionBar.classList.toggle("hidden", !selected);
+  elements.mobileActionBar.classList.remove("hidden");
+  elements.mobileActionBar.classList.toggle("has-selection", Boolean(selected));
   elements.body.classList.toggle("piece-selected", Boolean(selected));
 }
 
@@ -855,6 +856,8 @@ elements.flipButton.addEventListener("click", flipSelected);
 elements.mobileRotateButton.addEventListener("click", rotateSelected);
 elements.mobileFlipButton.addEventListener("click", flipSelected);
 elements.mobileCancelButton.addEventListener("click", () => cancelSelection({ restorePickedUp: true }));
+elements.mobileActionBar.addEventListener("pointerdown", (event) => event.stopPropagation());
+elements.mobileActionBar.addEventListener("click", (event) => event.stopPropagation());
 
 elements.pieceTray.addEventListener("pointerdown", (event) => {
   const card = event.target.closest("[data-piece]");
