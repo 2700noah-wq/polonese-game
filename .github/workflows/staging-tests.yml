@@ -31,4 +31,4 @@ jobs:
           node --check logic.js
 
       - name: Automatische Tests ausführen
-        run: npm test
+        run: node --test tests/logic.test.mjs
