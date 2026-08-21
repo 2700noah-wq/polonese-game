@@ -30,6 +30,7 @@ jobs:
           node --check game.js
           node --check logic.js
           node --check level-picker.js
+          node --check placement-math.js
 
       - name: Automatische Tests ausführen
         run: node --test tests/*.test.mjs
