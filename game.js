@@ -240,29 +240,18 @@ function reservedOwnerAtCell(cellIndex) {
   return state.puzzle.clues.find((clue) => placementCells(clue).includes(cellIndex))?.pieceId ?? null;
 }
 
-function variantCenterCell(cells) {
-  const maxRow = Math.max(...cells.map(([row]) => row));
-  const maxCol = Math.max(...cells.map(([, col]) => col));
-  const centerRow = maxRow / 2;
-  const centerCol = maxCol / 2;
-  return cells.reduce((best, cell) => {
-    const distance = ((cell[0] - centerRow) ** 2) + ((cell[1] - centerCol) ** 2);
-    const bestDistance = ((best[0] - centerRow) ** 2) + ((best[1] - centerCol) ** 2);
-    return distance < bestDistance ? cell : best;
-  }, cells[0]);
-}
-
-function candidateFromCell(cellIndex, anchorCell = null) {
+function candidateFromCell(cellIndex) {
   const variant = selectedVariant();
   if (!variant) return null;
   const clickedRow = Math.floor(cellIndex / BOARD_COLS);
   const clickedCol = cellIndex % BOARD_COLS;
-  const [anchorRow, anchorCol] = anchorCell ?? variantCenterCell(variant.cells);
   return {
     pieceId: state.selectedPieceId,
     variant: variant.index,
-    row: clickedRow - anchorRow,
-    col: clickedCol - anchorCol,
+    ...placementFromBoardPoint(
+      { row: clickedRow + 0.5, col: clickedCol + 0.5 },
+      pointerAnchorForPlacement(variant.cells),
+    ),
   };
 }
 
