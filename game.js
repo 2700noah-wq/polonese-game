@@ -16,6 +16,7 @@ import {
   validateCompletedBoard,
 } from "./logic.js?v=20260819-2";
 import { createLevelPickerItems } from "./level-picker.js?v=20260820-1";
+import { pointerAnchorForPlacement, placementFromBoardPoint } from "./placement-math.js?v=20260821-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -35,8 +36,6 @@ const elements = {
   progressBar: document.querySelector("#progressBar"),
   endlessRound: document.querySelector("#endlessRound"),
   newEndlessButton: document.querySelector("#newEndlessButton"),
-  timer: document.querySelector("#timer"),
-  bestTime: document.querySelector("#bestTime"),
   clueCount: document.querySelector("#clueCount"),
   templateBoard: document.querySelector("#templateBoard"),
   gameBoard: document.querySelector("#gameBoard"),
@@ -138,7 +137,7 @@ let dragGhost = null;
 let suppressClickUntil = 0;
 
 const DRAG_THRESHOLD = 8;
-const TOUCH_PREVIEW_LIFT = 44;
+const TOUCH_PREVIEW_LIFT = 64;
 
 function saveStats() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
@@ -595,7 +594,6 @@ function renderTray() {
 function renderStatus() {
   const completed = stats.completed[state.difficulty];
   const fixedSolved = DIFFICULTY_ORDER.reduce((sum, difficulty) => sum + stats.completed[difficulty].length, 0);
-  const best = Number(stats.bestTimes[bestTimeKey()]);
 
   elements.modeSelector.querySelectorAll("[data-mode]").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === state.mode);
@@ -615,7 +613,6 @@ function renderStatus() {
   elements.endlessRound.textContent = `Runde ${state.endlessRound}`;
   elements.clueCount.textContent = String(state.puzzle.clues.length);
   elements.placedCounter.textContent = `${state.placed.size} / ${PIECES.length} Teile`;
-  elements.bestTime.textContent = best ? formatTime(best) : "–";
   elements.headerSolved.textContent = String(stats.totalSolved);
   elements.undoButton.disabled = state.history.length === 0 || state.solved;
   elements.resetButton.disabled = state.placed.size === 0 || state.solved;
@@ -683,7 +680,6 @@ function updateTimer() {
   if (!state.solved) {
     state.elapsedSeconds = Math.floor((performance.now() - state.startedAt) / 1000);
   }
-  elements.timer.textContent = formatTime(state.elapsedSeconds);
 }
 
 function openDialog(dialog) {
@@ -717,7 +713,7 @@ function nextEndlessPuzzle(incrementRound = true) {
   loadPuzzle();
 }
 
-function boardCellFromPoint(clientX, clientY, pointerType) {
+function boardPointFromPointer(clientX, clientY, pointerType) {
   const boardRect = elements.gameBoard.getBoundingClientRect();
   let targetY = clientY;
   if (pointerType === "touch") {
@@ -730,22 +726,13 @@ function boardCellFromPoint(clientX, clientY, pointerType) {
     || targetY < boardRect.top
     || targetY > boardRect.bottom
   ) return null;
-
-  let nearest = null;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  elements.gameBoard.querySelectorAll("[data-cell]").forEach((cell) => {
-    const rect = cell.getBoundingClientRect();
-    const distance = ((clientX - (rect.left + rect.width / 2)) ** 2)
-      + ((targetY - (rect.top + rect.height / 2)) ** 2);
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearest = Number(cell.dataset.cell);
-    }
-  });
-  return nearest;
+  return {
+    row: ((targetY - boardRect.top) / boardRect.height) * BOARD_ROWS,
+    col: ((clientX - boardRect.left) / boardRect.width) * BOARD_COLS,
+  };
 }
 
-function createDragGhost(pieceId, anchorCell) {
+function createDragGhost(pieceId, pointerAnchor) {
   dragGhost?.remove();
   const variant = selectedVariant();
   if (!variant) return;
@@ -760,8 +747,8 @@ function createDragGhost(pieceId, anchorCell) {
   dragGhost.style.setProperty("--drag-unit", `${unit}px`);
   dragGhost.style.width = `${(maxCol + 1) * unit}px`;
   dragGhost.style.height = `${(maxRow + 1) * unit}px`;
-  dragGhost.dataset.anchorRow = String(anchorCell[0]);
-  dragGhost.dataset.anchorCol = String(anchorCell[1]);
+  dragGhost.dataset.anchorRow = String(pointerAnchor.row);
+  dragGhost.dataset.anchorCol = String(pointerAnchor.col);
   variant.cells.forEach(([row, col]) => {
     const ball = document.createElement("i");
     ball.style.left = `${col * unit}px`;
@@ -792,7 +779,7 @@ function beginPotentialDrag(event, pieceId, source, sourceCellIndex = null) {
     startX: event.clientX,
     startY: event.clientY,
     active: false,
-    anchorCell: null,
+    pointerAnchor: null,
   };
 }
 
@@ -802,7 +789,10 @@ function activateDrag(event) {
   if (dragSession.source === "board" && originalPlacement) {
     const boardRow = Math.floor(dragSession.sourceCellIndex / BOARD_COLS);
     const boardCol = dragSession.sourceCellIndex % BOARD_COLS;
-    dragSession.anchorCell = [boardRow - originalPlacement.row, boardCol - originalPlacement.col];
+    dragSession.pointerAnchor = {
+      row: boardRow - originalPlacement.row + 0.5,
+      col: boardCol - originalPlacement.col + 0.5,
+    };
   }
 
   if (state.selectedPieceId !== dragSession.pieceId || originalPlacement) {
@@ -814,20 +804,24 @@ function activateDrag(event) {
   }
 
   const variant = selectedVariant();
-  dragSession.anchorCell ??= variantCenterCell(variant.cells);
+  dragSession.pointerAnchor ??= pointerAnchorForPlacement(variant.cells);
   dragSession.active = true;
   elements.body.classList.add("dragging-piece");
-  createDragGhost(dragSession.pieceId, dragSession.anchorCell);
+  createDragGhost(dragSession.pieceId, dragSession.pointerAnchor);
   moveDragGhost(event.clientX, event.clientY, dragSession.pointerType);
 }
 
 function updateActiveDrag(event) {
   if (!dragSession?.active) return;
   moveDragGhost(event.clientX, event.clientY, dragSession.pointerType);
-  const cellIndex = boardCellFromPoint(event.clientX, event.clientY, dragSession.pointerType);
-  const placement = cellIndex === null
+  const point = boardPointFromPointer(event.clientX, event.clientY, dragSession.pointerType);
+  const placement = point === null
     ? null
-    : candidateFromCell(cellIndex, dragSession.anchorCell);
+    : {
+      pieceId: state.selectedPieceId,
+      variant: selectedVariant().index,
+      ...placementFromBoardPoint(point, dragSession.pointerAnchor),
+    };
   const key = placement
     ? `${placement.pieceId}:${placement.variant}:${placement.row}:${placement.col}`
     : "outside";
