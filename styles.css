@@ -1299,7 +1299,7 @@ body.dragging-piece .board-wrap {
 
 @media (max-width: 640px) {
   body {
-    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    padding-bottom: calc(70px + env(safe-area-inset-bottom));
   }
 
   .topbar,
@@ -1336,51 +1336,71 @@ body.dragging-piece .board-wrap {
   }
 
   .game-panel {
-    padding: 18px 12px;
+    padding: 10px 8px;
   }
 
   .game-heading {
-    gap: 12px;
-  }
-
-  .game-heading h1 {
-    font-size: 2.1rem;
-  }
-
-  .game-heading p:not(.eyebrow) {
-    font-size: 0.75rem;
-  }
-
-  .clue-count {
-    width: 68px;
-    padding: 10px 7px;
+    display: none;
   }
 
   .template-card {
-    display: block;
-    padding: 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
   }
 
   .template-board {
-    margin-top: 20px;
+    width: 100%;
+    margin: 0;
+    padding: 6px;
+    gap: 2px;
+    border-radius: 13px;
+  }
+
+  .card-heading {
+    min-width: 0;
+  }
+
+  .card-heading small {
+    display: none;
+  }
+
+  .workspace {
+    gap: 8px;
   }
 
   .board-card,
   .tray-section {
-    padding: 12px;
-  }
-
-  .board-wrap {
     padding: 8px;
   }
 
+  .board-wrap {
+    padding: 5px;
+  }
+
   .game-board {
-    gap: 3px;
+    gap: 2px;
     touch-action: none;
   }
 
+  .board-toolbar {
+    margin-bottom: 7px;
+  }
+
+  .board-toolbar small {
+    display: none;
+  }
+
+  .board-message {
+    min-height: 15px;
+    margin-top: 7px;
+    font-size: 0.58rem;
+  }
+
   .tray-heading {
-    align-items: flex-start;
+    display: none;
   }
 
   .piece-actions {
@@ -1394,46 +1414,54 @@ body.dragging-piece .board-wrap {
   }
 
   .piece-tray {
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(122px, 39vw);
-    gap: 10px;
-    padding: 2px 2px 10px;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scroll-padding-inline: 2px;
-    scroll-snap-type: inline proximity;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    gap: 6px;
+    padding: 0;
+    overflow: visible;
   }
 
   .piece-card {
-    min-height: 112px;
-    scroll-snap-align: start;
-    touch-action: pan-x;
+    min-height: 64px;
+    padding: 2px;
+    touch-action: manipulation;
   }
 
-  .piece-card strong {
-    font-size: 0.68rem;
+  .mini-piece {
+    --mini-size: 8px;
+    height: 54px;
+    margin: 0 auto;
   }
 
+  .piece-card strong,
   .piece-card small {
-    font-size: 0.56rem;
+    display: none;
+  }
+
+  .piece-card.is-clue::after {
+    content: "★";
+    top: 3px;
+    right: 4px;
+    padding: 0;
+    color: var(--accent);
+    background: transparent;
+    font-size: 0.75rem;
   }
 
   .mobile-action-bar {
     position: fixed;
-    right: 11px;
-    bottom: max(10px, env(safe-area-inset-bottom));
-    left: 11px;
+    right: 8px;
+    bottom: max(7px, env(safe-area-inset-bottom));
+    left: 8px;
     z-index: 1000;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 68px 76px 48px;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) 57px 64px 42px;
+    gap: 5px;
     align-items: stretch;
-    padding: 8px;
+    padding: 6px;
     border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-    border-radius: 18px;
+    border-radius: 15px;
     background: rgba(255, 255, 255, 0.96);
     box-shadow: 0 18px 45px rgba(50, 10, 20, 0.24);
     backdrop-filter: blur(16px);
@@ -1472,7 +1500,7 @@ body.dragging-piece .board-wrap {
     position: relative;
     z-index: 1;
     min-width: 0;
-    min-height: 48px;
+    min-height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1514,7 +1542,7 @@ body.dragging-piece .board-wrap {
   }
 
   .toast {
-    bottom: calc(88px + env(safe-area-inset-bottom));
+    bottom: calc(70px + env(safe-area-inset-bottom));
   }
 
   .stats-grid {
