@@ -795,6 +795,7 @@ async function animateAbsoluteHit() {
   await wait(nextHit === 1 ? 950 : 680);
   recordAbsoluteHit(state.boss);
   elements.bossArena.dataset.damage = String(state.boss.hits);
+  renderStatus();
   elements.bossArena.classList.remove("hit", "crown-fly");
 
   if (state.boss.dead) {
