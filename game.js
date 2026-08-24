@@ -352,14 +352,6 @@ function candidateFromCell(cellIndex) {
   };
 }
 
-function futureLockedPlacements(placements) {
-  const byId = new Map(placements.map((placement) => [placement.pieceId, placement]));
-  state.puzzle.clues.forEach((clue) => {
-    if (!byId.has(clue.pieceId)) byId.set(clue.pieceId, clue);
-  });
-  return [...byId.values()];
-}
-
 function buildBossMutationPlan(placements) {
   if (!state.boss || state.boss.dead || state.boss.phase !== "puzzle") return null;
   return planNovelMutation({
@@ -373,9 +365,6 @@ function buildBossMutationPlan(placements) {
 }
 
 function validateSecretFuture(placements) {
-  if (state.model.solve(futureLockedPlacements(placements), { limit: 1 }).count === 0) {
-    return { valid: false, reason: "Dieser Zug blockiert das Secret Level. Probiere eine andere Position." };
-  }
   if (!state.boss || state.boss.phase !== "puzzle" || state.boss.dead) return { valid: true, reason: "" };
 
   const mustPrepareAttack = isAbsoluteBoss(state.boss)
@@ -386,11 +375,9 @@ function validateSecretFuture(placements) {
     return { valid: true, reason: "" };
   }
 
-  const plan = buildBossMutationPlan(placements);
-  if (!plan) {
-    return { valid: false, reason: "Der Boss kann diesen Aufbau nicht sicher verändern. Ordne die letzten Teile anders an." };
-  }
-  state.boss.pendingMutation = plan;
+  // Die Prüfung bereitet einen sicheren Bossangriff nur vor. Sie darf dem
+  // Spieler niemals verraten, ob seine aktuelle Anordnung später lösbar ist.
+  state.boss.pendingMutation = buildBossMutationPlan(placements);
   return { valid: true, reason: "" };
 }
 
@@ -734,7 +721,7 @@ function applyMutation(plan, absoluteMiss = false) {
 async function runNormalBossTheft() {
   const plan = state.boss.pendingMutation ?? buildBossMutationPlan(clonePlacements());
   if (!plan) {
-    setBoardMessage("Der Bossangriff wurde sicher abgebrochen. Ordne die letzten Teile neu.", true);
+    setBoardMessage("Der Boss beobachtet weiter. Du kannst deine Anordnung jederzeit verändern.");
     return;
   }
   const position = ["right", "left", "top"][state.boss.thefts.length % 3];
@@ -824,7 +811,7 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
   }
   const plan = buildBossMutationPlan(clonePlacements());
   if (!plan) {
-    setBoardMessage("Das Portal bleibt geschlossen: Ordne die letzten Teile neu, damit der Kampf lösbar bleibt.", true);
+    setBoardMessage("Das Portal bleibt vorerst geschlossen. Du kannst deine Anordnung weiter verändern.");
     if (alreadyLocked) setInputLocked(false);
     return;
   }
