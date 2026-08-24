@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Ein eigenständiges Online-Logikspiel mit festen Levels und Endlosmodus.",
+  "description": "Ein eigenständiges Online-Logikspiel mit festen Levels und geheimen Bosskämpfen.",
   "scripts": {
     "test": "node --test",
     "serve": "python3 -m http.server 4173"

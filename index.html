@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#d90429" />
-    <meta name="description" content="Polonese – das farbenfrohe Online-Logikspiel mit festen Levels und Endlosmodus." />
+    <meta name="description" content="Polonese – das farbenfrohe Online-Logikspiel mit festen Levels und geheimen Bosskämpfen." />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260821-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260824-secret-1" />
     <title>Polonese – Puzzle das Feld voll</title>
   </head>
   <body data-theme="polish">
@@ -37,11 +37,13 @@
           <p class="eyebrow">Spielmodus</p>
           <div class="segmented" id="modeSelector">
             <button class="active" type="button" data-mode="fixed">Level</button>
-            <button type="button" data-mode="endless">Endlos</button>
+            <button class="secret-mode-button locked" id="secretModeButton" type="button" data-mode="secret" aria-label="Secret Level, gesperrt">
+              <span>Secret Level</span><span class="mode-lock" id="secretModeLock" aria-hidden="true">🔒</span>
+            </button>
           </div>
         </section>
 
-        <section class="panel-section">
+        <section class="panel-section" id="difficultyControls">
           <div class="section-title-row">
             <p class="eyebrow">Schwierigkeit</p>
             <span id="difficultyHint">Viele Vorgaben</span>
@@ -71,10 +73,11 @@
           <div class="progress-track"><span id="progressBar"></span></div>
         </section>
 
-        <section class="panel-section endless-section hidden" id="endlessControls">
-          <p class="eyebrow">Endlos-Aufgabe</p>
-          <strong id="endlessRound">Runde 1</strong>
-          <button class="secondary-button" id="newEndlessButton" type="button">Neue Aufgabe erzeugen</button>
+        <section class="panel-section secret-status-section hidden" id="secretStatusControls">
+          <p class="eyebrow">Secret Level</p>
+          <strong id="secretBossName">Leicht</strong>
+          <span id="secretBossStatus">Bossphase 0 / 3</span>
+          <button class="secondary-button" id="openSecretPickerButton" type="button">Boss auswählen</button>
         </section>
 
         <button class="how-button" id="howButton" type="button">Wie wird gespielt?</button>
@@ -83,15 +86,15 @@
       <section class="game-panel">
         <div class="game-heading">
           <div>
-            <p class="eyebrow">Deine Herausforderung</p>
-            <h1>Fülle jedes Feld.</h1>
-            <p>Lege zuerst alle Teile exakt wie auf der Vorlage. Erst danach werden die übrigen Teile freigeschaltet – fülle das Feld ohne Lücken und Überlappungen.</p>
+            <p class="eyebrow" id="challengeEyebrow">Deine Herausforderung</p>
+            <h1 id="challengeTitle">Fülle jedes Feld.</h1>
+            <p id="challengeDescription">Lege zuerst alle Teile exakt wie auf der Vorlage. Erst danach werden die übrigen Teile freigeschaltet – fülle das Feld ohne Lücken und Überlappungen.</p>
           </div>
           <div class="clue-count"><span>Vorlagen</span><strong id="clueCount">0</strong></div>
         </div>
 
         <div class="workspace">
-          <section class="template-card">
+          <section class="template-card" id="templateCard">
             <div class="card-heading">
               <div><span class="status-dot"></span><strong>Vorlage</strong></div>
               <small>Diese Teile zuerst exakt nachlegen</small>
@@ -99,7 +102,7 @@
             <div class="template-board" id="templateBoard" aria-label="Vorlage der aktuellen Aufgabe"></div>
           </section>
 
-          <section class="board-card">
+          <section class="board-card" id="boardCard">
             <div class="board-toolbar">
               <div>
                 <span class="status-dot live"></span>
@@ -113,6 +116,24 @@
             </div>
             <div class="board-wrap">
               <div class="game-board" id="gameBoard" role="grid" aria-label="Spielfeld mit fünf Reihen und zehn Spalten"></div>
+            </div>
+            <div class="boss-arena" id="bossArena" aria-hidden="true">
+              <div class="boss-portal" aria-hidden="true"><i></i><i></i><i></i></div>
+              <button class="boss-creature" id="bossCreature" type="button" tabindex="-1" aria-label="Secret-Level-Boss angreifen">
+                <span class="boss-shadow"></span>
+                <span class="boss-crown"><i></i><i></i><i></i></span>
+                <span class="boss-horn horn-left"></span>
+                <span class="boss-horn horn-right"></span>
+                <span class="boss-body">
+                  <span class="boss-eye eye-left"><i></i></span>
+                  <span class="boss-eye eye-right"><i></i></span>
+                  <span class="boss-mouth"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span class="boss-crack crack-one"></span>
+                  <span class="boss-crack crack-two"></span>
+                  <span class="boss-crack crack-three"></span>
+                </span>
+                <span class="boss-debris"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              </button>
             </div>
             <p class="board-message" id="boardMessage">Wähle unten einen Stein aus und tippe auf das Spielfeld – oder ziehe ihn direkt hinein.</p>
           </section>
@@ -135,6 +156,7 @@
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="secret-notice" id="secretNotice" role="status" aria-live="polite"></div>
 
     <div class="mobile-action-bar" id="mobileActionBar" aria-label="Bedienung des ausgewählten Spielsteins">
       <div class="mobile-selection">
@@ -149,14 +171,22 @@
     <dialog class="modal" id="winDialog">
       <div class="celebration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <button class="modal-close" data-close="winDialog" type="button" aria-label="Fenster schließen">×</button>
-      <p class="eyebrow">Aufgabe geschafft</p>
-      <h2>Perfekt eingepasst!</h2>
-      <p>Jedes Feld ist belegt und alle Vorlagen stimmen.</p>
+      <p class="eyebrow" id="winEyebrow">Aufgabe geschafft</p>
+      <h2 id="winTitle">Perfekt eingepasst!</h2>
+      <p id="winDescription">Jedes Feld ist belegt und alle Vorlagen stimmen.</p>
       <div class="result-grid">
         <div><span>Zeit</span><strong id="resultTime">00:00</strong></div>
         <div><span>Bestzeit</span><strong id="resultBest">00:00</strong></div>
       </div>
       <button class="primary-button" id="continueButton" type="button">Nächste Aufgabe</button>
+    </dialog>
+
+    <dialog class="modal wide secret-picker-modal" id="secretPickerDialog">
+      <button class="modal-close" data-close="secretPickerDialog" type="button" aria-label="Secret-Level-Auswahl schließen">×</button>
+      <p class="eyebrow">Verborgene Herausforderungen</p>
+      <h2>Secret Level</h2>
+      <p>Fünf Entwicklungsstufen derselben Kreatur. Besiegte Bosse bleiben auf diesem Gerät gespeichert.</p>
+      <div class="secret-boss-grid" id="secretBossGrid" aria-label="Secret-Level-Bosse"></div>
     </dialog>
 
     <dialog class="modal wide level-picker-modal" id="levelPickerDialog">
@@ -180,7 +210,7 @@
       <h2>Polonese-Statistik</h2>
       <div class="stats-grid">
         <div><span>Gelöste Aufgaben</span><strong id="statsSolved">0</strong></div>
-        <div><span>Endlos-Runden</span><strong id="statsEndless">0</strong></div>
+        <div><span>Secret-Bosse</span><strong id="statsSecret">0 / 5</strong></div>
         <div><span>Gesamte Spielzeit</span><strong id="statsPlayTime">00:00</strong></div>
         <div><span>Feste Levels</span><strong id="statsPercent">0 %</strong></div>
       </div>
@@ -197,9 +227,10 @@
         <li><strong>Teil auswählen</strong><span>Tippe auf einen Spielstein. Am Handy bleiben Drehen und Spiegeln unten immer erreichbar.</span></li>
         <li><strong>Auf das Feld setzen</strong><span>Tippe auf ein freies Feld oder ziehe den Stein direkt hinein. Gesetzte Steine lassen sich ebenfalls verschieben.</span></li>
         <li><strong>Alles ausfüllen</strong><span>Gewonnen hast du, wenn alle zehn Teile lückenlos auf dem Brett liegen.</span></li>
+        <li><strong>Secret Level</strong><span>Nach allen leichten Levels warten freischaltbare Bosskämpfe mit eigenen Regeln.</span></li>
       </ol>
     </dialog>
 
-    <script type="module" src="./game.js?v=20260821-1"></script>
+    <script type="module" src="./game.js?v=20260824-secret-1"></script>
   </body>
 </html>

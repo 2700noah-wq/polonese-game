@@ -5,7 +5,9 @@ Polonese ist ein eigenständiges, browserbasiertes Logikspiel: Eine Vorlage gibt
 ## Funktionen
 
 - 240 deterministische Levels: je 60 in Leicht, Mittel, Schwer und Polonesisch
-- Endlosmodus mit neu erzeugten, eindeutig lösbaren Aufgaben
+- freischaltbare Secret Level mit fünf Bossstufen
+- validierte Puzzleveränderungen, drei Diebstähle und eine vergrößerte Schlussphase
+- interaktiver Endboss Absolut mit wechselnden Portalen und drei dauerhaften Treffern
 - durchgehend polnischer Rot-Weiß-Stil
 - Timer und lokale Bestzeiten
 - eigener, dauerhaft lokal gespeicherter Spielstand pro Browser/Gerät
@@ -28,7 +30,7 @@ Anschließend `http://localhost:4173` öffnen.
 
 Das Spiel besteht aus HTML, CSS und modernem JavaScript. Der Generator nutzt einen Backtracking-Solver mit einer Minimum-Remaining-Values-Heuristik. Vorgegebene Teile werden nur entfernt, wenn die Aufgabe weiterhin genau eine Lösung besitzt.
 
-Der Workflow unter `.github/workflows/pages.yml` testet die Puzzle-Logik und veröffentlicht den Stand automatisch auf GitHub Pages.
+Der Workflow unter `.github/workflows/pages.yml` testet die Puzzle-Logik und veröffentlicht den Stand automatisch auf GitHub Pages. Neue Funktionen werden zuerst isoliert auf dem Zweig `staging` geprüft.
 
 ## Eigenständigkeit
 

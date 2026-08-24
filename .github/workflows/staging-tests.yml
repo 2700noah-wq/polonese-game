@@ -31,6 +31,10 @@ jobs:
           node --check logic.js
           node --check level-picker.js
           node --check placement-math.js
+          node --check puzzle-model.js
+          node --check game-storage.js
+          node --check secret-levels.js
+          node --check boss-engine.js
 
       - name: Automatische Tests ausführen
         run: node --test tests/*.test.mjs

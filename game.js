@@ -4,40 +4,77 @@ import {
   DIFFICULTIES,
   FIXED_LEVELS_PER_DIFFICULTY,
   PIECES,
-  areCluesPlaced,
   fixedLevelSeed,
   generatePuzzle,
-  getPiece,
-  getVariantIndex,
-  getVariants,
-  isPlacementInside,
-  placementCells,
   placementsEqual,
-  validateCompletedBoard,
 } from "./logic.js?v=20260819-2";
 import { createLevelPickerItems } from "./level-picker.js?v=20260820-1";
 import { pointerAnchorForPlacement, placementFromBoardPoint } from "./placement-math.js?v=20260821-1";
+import { createPuzzleModel } from "./puzzle-model.js?v=20260824-secret-1";
+import { sanitizeStats } from "./game-storage.js?v=20260824-secret-1";
+import {
+  BOSS_CONFIG,
+  SECRET_NOTICE_MS,
+  bossLockMessage,
+  createBossPuzzle,
+  createBossSelectionItems,
+  createFinalBoardPlan,
+  isBossUnlocked,
+  isSecretModeUnlocked,
+  planNovelMutation,
+  secretModeLockMessage,
+} from "./secret-levels.js?v=20260824-secret-1";
+import {
+  ABSOLUTE_HITS_TO_WIN,
+  NORMAL_BOSS_THEFTS,
+  absoluteReactionWindow,
+  beginFinalBoard,
+  canFinishBoss,
+  createBossState,
+  isAbsoluteBoss,
+  recordAbsoluteHit,
+  recordAbsoluteMiss,
+  recordTheft,
+  shouldStartAbsoluteAttack,
+  shouldStartFalseEnding,
+  shouldStartNormalAttack,
+} from "./boss-engine.js?v=20260824-secret-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
+const DRAG_THRESHOLD = 8;
+const TOUCH_PREVIEW_LIFT = 64;
+const ABSOLUTE_POSITIONS = ["left", "right", "top"];
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const elements = {
   body: document.body,
+  gamePanel: document.querySelector(".game-panel"),
   modeSelector: document.querySelector("#modeSelector"),
+  secretModeButton: document.querySelector("#secretModeButton"),
+  secretModeLock: document.querySelector("#secretModeLock"),
+  difficultyControls: document.querySelector("#difficultyControls"),
   difficultySelector: document.querySelector("#difficultySelector"),
   difficultyHint: document.querySelector("#difficultyHint"),
   fixedLevelControls: document.querySelector("#fixedLevelControls"),
-  endlessControls: document.querySelector("#endlessControls"),
+  secretStatusControls: document.querySelector("#secretStatusControls"),
+  secretBossName: document.querySelector("#secretBossName"),
+  secretBossStatus: document.querySelector("#secretBossStatus"),
+  openSecretPickerButton: document.querySelector("#openSecretPickerButton"),
   previousLevel: document.querySelector("#previousLevel"),
   nextLevel: document.querySelector("#nextLevel"),
   levelPickerButton: document.querySelector("#levelPickerButton"),
   levelNumber: document.querySelector("#levelNumber"),
   levelProgressText: document.querySelector("#levelProgressText"),
   progressBar: document.querySelector("#progressBar"),
-  endlessRound: document.querySelector("#endlessRound"),
-  newEndlessButton: document.querySelector("#newEndlessButton"),
+  challengeEyebrow: document.querySelector("#challengeEyebrow"),
+  challengeTitle: document.querySelector("#challengeTitle"),
+  challengeDescription: document.querySelector("#challengeDescription"),
   clueCount: document.querySelector("#clueCount"),
+  templateCard: document.querySelector("#templateCard"),
   templateBoard: document.querySelector("#templateBoard"),
+  boardCard: document.querySelector("#boardCard"),
+  boardWrap: document.querySelector(".board-wrap"),
   gameBoard: document.querySelector("#gameBoard"),
   placedCounter: document.querySelector("#placedCounter"),
   boardMessage: document.querySelector("#boardMessage"),
@@ -56,69 +93,58 @@ const elements = {
   headerSolved: document.querySelector("#headerSolved"),
   howButton: document.querySelector("#howButton"),
   toast: document.querySelector("#toast"),
+  secretNotice: document.querySelector("#secretNotice"),
+  bossArena: document.querySelector("#bossArena"),
+  bossCreature: document.querySelector("#bossCreature"),
   winDialog: document.querySelector("#winDialog"),
+  winEyebrow: document.querySelector("#winEyebrow"),
+  winTitle: document.querySelector("#winTitle"),
+  winDescription: document.querySelector("#winDescription"),
   levelPickerDialog: document.querySelector("#levelPickerDialog"),
   levelPickerDifficulty: document.querySelector("#levelPickerDifficulty"),
   levelPickerProgress: document.querySelector("#levelPickerProgress"),
   levelPickerGrid: document.querySelector("#levelPickerGrid"),
+  secretPickerDialog: document.querySelector("#secretPickerDialog"),
+  secretBossGrid: document.querySelector("#secretBossGrid"),
   statsDialog: document.querySelector("#statsDialog"),
   howDialog: document.querySelector("#howDialog"),
   resultTime: document.querySelector("#resultTime"),
   resultBest: document.querySelector("#resultBest"),
   continueButton: document.querySelector("#continueButton"),
   statsSolved: document.querySelector("#statsSolved"),
-  statsEndless: document.querySelector("#statsEndless"),
+  statsSecret: document.querySelector("#statsSecret"),
   statsPlayTime: document.querySelector("#statsPlayTime"),
   statsPercent: document.querySelector("#statsPercent"),
   difficultyStats: document.querySelector("#difficultyStats"),
 };
 
-function freshStats() {
-  return {
-    completed: Object.fromEntries(DIFFICULTY_ORDER.map((difficulty) => [difficulty, []])),
-    bestTimes: {},
-    totalSolved: 0,
-    endlessSolved: 0,
-    totalPlaySeconds: 0,
-    endlessRound: 1,
-    currentLevel: Object.fromEntries(DIFFICULTY_ORDER.map((difficulty) => [difficulty, 0])),
-  };
-}
-
 function loadStats() {
-  const fallback = freshStats();
   try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!stored || typeof stored !== "object") return fallback;
-    for (const difficulty of DIFFICULTY_ORDER) {
-      const completed = Array.isArray(stored.completed?.[difficulty])
-        ? stored.completed[difficulty].filter((level) => Number.isInteger(level) && level >= 0 && level < FIXED_LEVELS_PER_DIFFICULTY)
-        : [];
-      fallback.completed[difficulty] = [...new Set(completed)];
-      const current = Number(stored.currentLevel?.[difficulty]);
-      fallback.currentLevel[difficulty] = Number.isInteger(current)
-        ? Math.max(0, Math.min(FIXED_LEVELS_PER_DIFFICULTY - 1, current))
-        : 0;
-    }
-    fallback.bestTimes = stored.bestTimes && typeof stored.bestTimes === "object" ? stored.bestTimes : {};
-    fallback.totalSolved = Math.max(0, Number(stored.totalSolved) || 0);
-    fallback.endlessSolved = Math.max(0, Number(stored.endlessSolved) || 0);
-    fallback.totalPlaySeconds = Math.max(0, Number(stored.totalPlaySeconds) || 0);
-    fallback.endlessRound = Math.max(1, Number(stored.endlessRound) || 1);
-    return fallback;
+    return sanitizeStats(JSON.parse(localStorage.getItem(STORAGE_KEY)), {
+      difficultyIds: DIFFICULTY_ORDER,
+      levelsPerDifficulty: FIXED_LEVELS_PER_DIFFICULTY,
+    });
   } catch {
-    return fallback;
+    return sanitizeStats(null, {
+      difficultyIds: DIFFICULTY_ORDER,
+      levelsPerDifficulty: FIXED_LEVELS_PER_DIFFICULTY,
+    });
   }
 }
 
 const stats = loadStats();
+const unlockedAtStartup = isSecretModeUnlocked(stats.completed);
+const showStartupUnlockNotice = unlockedAtStartup && !stats.secret.unlockNoticeShown;
+if (unlockedAtStartup) stats.secret.unlocked = true;
+
 const state = {
   mode: "fixed",
   difficulty: "easy",
   levelIndex: stats.currentLevel.easy,
-  endlessRound: stats.endlessRound,
-  endlessSeed: randomSeed(),
+  bossId: null,
+  boss: null,
   puzzle: null,
+  model: null,
   placed: new Map(),
   selectedPieceId: null,
   rotation: 0,
@@ -129,25 +155,25 @@ const state = {
   startedAt: performance.now(),
   elapsedSeconds: 0,
   solved: false,
+  inputLocked: false,
+  pendingUnlockNotice: false,
 };
 
 let toastTimeout;
+let secretNoticeTimeout;
 let dragSession = null;
 let dragGhost = null;
 let suppressClickUntil = 0;
-
-const DRAG_THRESHOLD = 8;
-const TOUCH_PREVIEW_LIFT = 64;
+let bossHitResolver = null;
+let bossHitTimer = null;
 
 function saveStats() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
 }
 
-function randomSeed() {
-  if (globalThis.crypto?.getRandomValues) {
-    return globalThis.crypto.getRandomValues(new Uint32Array(1))[0];
-  }
-  return Date.now() >>> 0;
+function wait(milliseconds) {
+  const duration = prefersReducedMotion.matches ? Math.min(milliseconds, 45) : milliseconds;
+  return new Promise((resolve) => window.setTimeout(resolve, duration));
 }
 
 function clonePlacements() {
@@ -155,12 +181,19 @@ function clonePlacements() {
 }
 
 function restorePlacements(snapshot) {
-  state.placed = new Map(snapshot.map((placement) => [placement.pieceId, { ...placement }]));
+  state.placed = new Map(snapshot
+    .filter((placement) => state.model.getPiece(placement.pieceId))
+    .map((placement) => [placement.pieceId, { ...placement }]));
+  invalidatePendingMutation();
 }
 
 function pushHistory() {
   state.history.push(clonePlacements());
   if (state.history.length > 80) state.history.shift();
+}
+
+function invalidatePendingMutation() {
+  if (state.boss) state.boss.pendingMutation = null;
 }
 
 function formatTime(totalSeconds) {
@@ -175,29 +208,50 @@ function formatTime(totalSeconds) {
 function bestTimeKey() {
   return state.mode === "fixed"
     ? `fixed:${state.difficulty}:${state.levelIndex}`
-    : `endless:${state.difficulty}`;
+    : `secret:${state.bossId}`;
+}
+
+function currentPieces() {
+  return state.puzzle?.pieces ?? PIECES;
+}
+
+function currentPiece(pieceId) {
+  return state.model?.getPiece(pieceId);
+}
+
+function currentVariants(pieceId) {
+  return state.model?.getVariants(pieceId) ?? [];
 }
 
 function selectedVariant() {
   if (!state.selectedPieceId) return null;
-  const index = getVariantIndex(state.selectedPieceId, state.rotation, state.flipped);
-  return { index, cells: getVariants(state.selectedPieceId)[index] };
+  const index = state.model.getVariantIndex(state.selectedPieceId, state.rotation, state.flipped);
+  return { index, cells: currentVariants(state.selectedPieceId)[index] };
 }
 
 function findTransform(pieceId, variantIndex) {
   for (const flipped of [false, true]) {
     for (let rotation = 0; rotation < 4; rotation += 1) {
-      if (getVariantIndex(pieceId, rotation, flipped) === variantIndex) return { rotation, flipped };
+      if (state.model.getVariantIndex(pieceId, rotation, flipped) === variantIndex) return { rotation, flipped };
     }
   }
   return { rotation: 0, flipped: false };
 }
 
-function showToast(message) {
+function showToast(message, duration = 2500) {
   window.clearTimeout(toastTimeout);
   elements.toast.textContent = message;
   elements.toast.classList.add("visible");
-  toastTimeout = window.setTimeout(() => elements.toast.classList.remove("visible"), 2500);
+  toastTimeout = window.setTimeout(() => elements.toast.classList.remove("visible"), duration);
+}
+
+function showSecretNotice(message) {
+  window.clearTimeout(secretNoticeTimeout);
+  elements.secretNotice.textContent = message;
+  elements.secretNotice.classList.add("visible");
+  secretNoticeTimeout = window.setTimeout(() => {
+    elements.secretNotice.classList.remove("visible");
+  }, SECRET_NOTICE_MS);
 }
 
 function setBoardMessage(message, isError = false) {
@@ -205,7 +259,7 @@ function setBoardMessage(message, isError = false) {
   elements.boardMessage.classList.toggle("error", isError);
 }
 
-function loadPuzzle() {
+function resetInteractionState() {
   state.solved = false;
   state.placed.clear();
   state.selectedPieceId = null;
@@ -216,35 +270,78 @@ function loadPuzzle() {
   state.pickedUpPieceId = null;
   state.elapsedSeconds = 0;
   state.startedAt = performance.now();
-  const seed = state.mode === "fixed"
-    ? fixedLevelSeed(state.difficulty, state.levelIndex)
-    : state.endlessSeed;
-  state.puzzle = generatePuzzle(seed, state.difficulty);
+  state.inputLocked = false;
+  dragSession = null;
+  dragGhost?.remove();
+  dragGhost = null;
+  elements.body.classList.remove("dragging-piece", "boss-sequence-active");
+  hideBossArena();
+}
+
+function createFixedPuzzle() {
+  const generated = generatePuzzle(fixedLevelSeed(state.difficulty, state.levelIndex), state.difficulty);
+  const pieces = PIECES.map((piece) => ({ ...piece, cells: piece.cells.map((cell) => [...cell]) }));
+  const model = createPuzzleModel({ pieces, rows: BOARD_ROWS, cols: BOARD_COLS });
+  return {
+    ...generated,
+    rows: BOARD_ROWS,
+    cols: BOARD_COLS,
+    mask: null,
+    pieces,
+    model,
+    finalBoard: false,
+  };
+}
+
+function loadFixedPuzzle() {
+  resetInteractionState();
+  state.mode = "fixed";
+  state.bossId = null;
+  state.boss = null;
+  state.puzzle = createFixedPuzzle();
+  state.model = state.puzzle.model;
   setBoardMessage("Lege zuerst alle Teile aus der Vorlage exakt auf das Spielfeld.");
   renderAll();
 }
 
+function startSecretBoss(bossId) {
+  if (!isBossUnlocked(bossId, stats.completed, stats.secret)) {
+    showSecretNotice(bossLockMessage(bossId));
+    return;
+  }
+  if (elements.secretPickerDialog.open) elements.secretPickerDialog.close();
+  resetInteractionState();
+  state.mode = "secret";
+  state.bossId = bossId;
+  state.boss = createBossState(bossId);
+  state.puzzle = createBossPuzzle(bossId);
+  state.model = state.puzzle.model;
+  setBoardMessage("Lege zuerst die Vorlagen-Teile. Der Boss beobachtet jeden Zug.");
+  renderAll();
+  showToast(`${BOSS_CONFIG[bossId].label}: Der Boss wartet.`);
+}
+
 function placementAtCell(cellIndex) {
-  return [...state.placed.values()].find((placement) => placementCells(placement).includes(cellIndex));
+  return [...state.placed.values()].find((placement) => state.model.placementCells(placement).includes(cellIndex));
 }
 
 function clueForPiece(pieceId) {
   return state.puzzle.clues.find((clue) => clue.pieceId === pieceId);
 }
 
-function cluePhaseComplete() {
-  return areCluesPlaced(clonePlacements(), state.puzzle.clues);
+function cluePhaseComplete(placements = clonePlacements()) {
+  return state.puzzle.clues.every((clue) => placements.some((placement) => placementsEqual(placement, clue)));
 }
 
 function reservedOwnerAtCell(cellIndex) {
-  return state.puzzle.clues.find((clue) => placementCells(clue).includes(cellIndex))?.pieceId ?? null;
+  return state.puzzle.clues.find((clue) => state.model.placementCells(clue).includes(cellIndex))?.pieceId ?? null;
 }
 
 function candidateFromCell(cellIndex) {
   const variant = selectedVariant();
   if (!variant) return null;
-  const clickedRow = Math.floor(cellIndex / BOARD_COLS);
-  const clickedCol = cellIndex % BOARD_COLS;
+  const clickedRow = Math.floor(cellIndex / state.model.cols);
+  const clickedCol = cellIndex % state.model.cols;
   return {
     pieceId: state.selectedPieceId,
     variant: variant.index,
@@ -255,8 +352,50 @@ function candidateFromCell(cellIndex) {
   };
 }
 
+function futureLockedPlacements(placements) {
+  const byId = new Map(placements.map((placement) => [placement.pieceId, placement]));
+  state.puzzle.clues.forEach((clue) => {
+    if (!byId.has(clue.pieceId)) byId.set(clue.pieceId, clue);
+  });
+  return [...byId.values()];
+}
+
+function buildBossMutationPlan(placements) {
+  if (!state.boss || state.boss.dead || state.boss.phase !== "puzzle") return null;
+  return planNovelMutation({
+    puzzle: state.puzzle,
+    placements,
+    bossId: state.bossId,
+    serial: state.boss.attackCount + 1,
+    attackIndex: state.boss.attackCount,
+    seed: `${state.puzzle.seed}-${state.boss.attackCount}-${placements.map((placement) => placement.pieceId).join("-")}`,
+  });
+}
+
+function validateSecretFuture(placements) {
+  if (state.model.solve(futureLockedPlacements(placements), { limit: 1 }).count === 0) {
+    return { valid: false, reason: "Dieser Zug blockiert das Secret Level. Probiere eine andere Position." };
+  }
+  if (!state.boss || state.boss.phase !== "puzzle" || state.boss.dead) return { valid: true, reason: "" };
+
+  const mustPrepareAttack = isAbsoluteBoss(state.boss)
+    ? shouldStartAbsoluteAttack(state.boss, placements.length, currentPieces().length)
+    : shouldStartNormalAttack(state.boss, placements.length, currentPieces().length);
+  if (!mustPrepareAttack) {
+    state.boss.pendingMutation = null;
+    return { valid: true, reason: "" };
+  }
+
+  const plan = buildBossMutationPlan(placements);
+  if (!plan) {
+    return { valid: false, reason: "Der Boss kann diesen Aufbau nicht sicher verändern. Ordne die letzten Teile anders an." };
+  }
+  state.boss.pendingMutation = plan;
+  return { valid: true, reason: "" };
+}
+
 function validateCandidate(candidate) {
-  if (!candidate || !isPlacementInside(candidate)) {
+  if (!candidate || !state.model.isPlacementInside(candidate)) {
     return { valid: false, reason: "Das Teil ragt über den Rand hinaus." };
   }
 
@@ -268,8 +407,8 @@ function validateCandidate(candidate) {
     return { valid: false, reason: "Dieses Vorlagen-Teil muss exakt an die gezeigte Position." };
   }
 
-  const cells = placementCells(candidate);
-  const occupied = new Set(clonePlacements().flatMap((placement) => placementCells(placement)));
+  const cells = state.model.placementCells(candidate);
+  const occupied = new Set(clonePlacements().flatMap((placement) => state.model.placementCells(placement)));
   if (cells.some((cell) => occupied.has(cell))) {
     return { valid: false, reason: "Dort liegt bereits ein anderes Teil." };
   }
@@ -281,18 +420,21 @@ function validateCandidate(candidate) {
     return { valid: false, reason: "Dieses Feld ist für ein Vorlagen-Teil reserviert." };
   }
 
+  if (state.mode === "secret") return validateSecretFuture([...clonePlacements(), candidate]);
   return { valid: true, reason: "" };
 }
 
+function interactionBlocked() {
+  return state.solved || state.inputLocked;
+}
+
 function selectPiece(pieceId) {
-  if (state.solved) return;
+  if (interactionBlocked()) return;
   if (state.selectedPieceId === pieceId && !state.placed.has(pieceId)) {
-    setBoardMessage(`${getPiece(pieceId).name} ist bereits ausgewählt. Tippe auf das Feld oder ziehe den Stein.`);
+    setBoardMessage(`${currentPiece(pieceId).name} ist bereits ausgewählt. Tippe auf das Feld oder ziehe den Stein.`);
     return;
   }
-  if (state.pickedUpPieceId && state.pickedUpPieceId !== pieceId) {
-    cancelSelection({ restorePickedUp: true });
-  }
+  if (state.pickedUpPieceId && state.pickedUpPieceId !== pieceId) cancelSelection({ restorePickedUp: true });
   if (state.placed.has(pieceId)) {
     pickUpPiece(pieceId);
     return;
@@ -308,14 +450,15 @@ function selectPiece(pieceId) {
   state.flipped = false;
   state.preview = null;
   state.pickedUpPieceId = null;
-  setBoardMessage(`${getPiece(pieceId).name} ist ausgewählt. Tippe auf das Feld oder ziehe den Stein hinein.`);
+  invalidatePendingMutation();
+  setBoardMessage(`${currentPiece(pieceId).name} ist ausgewählt. Tippe auf das Feld oder ziehe den Stein hinein.`);
   renderBoard();
   renderTray();
 }
 
 function pickUpPiece(pieceId) {
   const placement = state.placed.get(pieceId);
-  if (!placement || state.solved) return;
+  if (!placement || interactionBlocked()) return;
   pushHistory();
   const transform = findTransform(pieceId, placement.variant);
   state.placed.delete(pieceId);
@@ -324,7 +467,8 @@ function pickUpPiece(pieceId) {
   state.flipped = transform.flipped;
   state.preview = null;
   state.pickedUpPieceId = pieceId;
-  setBoardMessage(`${getPiece(pieceId).name} aufgenommen. Setze es neu.`);
+  invalidatePendingMutation();
+  setBoardMessage(`${currentPiece(pieceId).name} aufgenommen. Setze es neu.`);
   renderBoard();
   renderTray();
   renderStatus();
@@ -346,12 +490,12 @@ function placeCandidate(candidate) {
   renderBoard();
   renderTray();
   renderStatus();
-  checkWin();
+  void checkProgress();
 }
 
 function placeSelected(cellIndex) {
-  if (!state.selectedPieceId || state.solved) {
-    setBoardMessage("Wähle zuerst unten einen Spielstein aus.", true);
+  if (!state.selectedPieceId || interactionBlocked()) {
+    if (!state.inputLocked) setBoardMessage("Wähle zuerst unten einen Spielstein aus.", true);
     return;
   }
   const candidate = candidateFromCell(cellIndex);
@@ -361,12 +505,11 @@ function placeSelected(cellIndex) {
     showToast(validation.reason);
     return;
   }
-
   placeCandidate(candidate);
 }
 
 function cancelSelection({ restorePickedUp = true } = {}) {
-  if (!state.selectedPieceId) return;
+  if (!state.selectedPieceId || state.inputLocked) return;
   if (restorePickedUp && state.pickedUpPieceId === state.selectedPieceId && state.history.length) {
     restorePlacements(state.history.pop());
     setBoardMessage("Der Spielstein liegt wieder an seiner vorherigen Position.");
@@ -378,29 +521,32 @@ function cancelSelection({ restorePickedUp = true } = {}) {
   state.pickedUpPieceId = null;
   state.rotation = 0;
   state.flipped = false;
+  invalidatePendingMutation();
   renderBoard();
   renderTray();
   renderStatus();
 }
 
 function rotateSelected() {
-  if (!state.selectedPieceId || state.solved) return;
+  if (!state.selectedPieceId || interactionBlocked()) return;
   state.rotation = (state.rotation + 1) % 4;
   state.preview = null;
+  invalidatePendingMutation();
   renderBoard();
   renderTray();
 }
 
 function flipSelected() {
-  if (!state.selectedPieceId || state.solved) return;
+  if (!state.selectedPieceId || interactionBlocked()) return;
   state.flipped = !state.flipped;
   state.preview = null;
+  invalidatePendingMutation();
   renderBoard();
   renderTray();
 }
 
 function undo() {
-  if (!state.history.length || state.solved) return;
+  if (!state.history.length || interactionBlocked()) return;
   restorePlacements(state.history.pop());
   state.selectedPieceId = null;
   state.preview = null;
@@ -414,7 +560,7 @@ function undo() {
 }
 
 function resetBoard() {
-  if (!state.placed.size || state.solved) return;
+  if (!state.placed.size || interactionBlocked()) return;
   pushHistory();
   state.placed.clear();
   state.selectedPieceId = null;
@@ -424,16 +570,20 @@ function resetBoard() {
   state.flipped = false;
   state.startedAt = performance.now();
   state.elapsedSeconds = 0;
-  setBoardMessage("Spielfeld geleert – beginne wieder mit den Vorlagen-Teilen.");
+  invalidatePendingMutation();
+  setBoardMessage(state.puzzle.finalBoard
+    ? "Das vergrößerte Spielfeld wurde geleert. Setze alle 13 Teile neu."
+    : "Spielfeld geleert – beginne wieder mit den Vorlagen-Teilen.");
   renderBoard();
   renderTray();
   renderStatus();
 }
 
-function checkWin() {
-  const placements = clonePlacements();
-  if (!validateCompletedBoard(placements, state.puzzle.clues)) return;
+function updateTimer() {
+  if (!state.solved) state.elapsedSeconds = Math.floor((performance.now() - state.startedAt) / 1000);
+}
 
+function recordTimeAndOpenWin({ eyebrow, title, description, continueText }) {
   state.solved = true;
   updateTimer();
   const time = Math.max(1, state.elapsedSeconds);
@@ -441,32 +591,308 @@ function checkWin() {
   const previousBest = Number(stats.bestTimes[key]);
   const isBest = !previousBest || time < previousBest;
   if (isBest) stats.bestTimes[key] = time;
-
-  stats.totalSolved += 1;
   stats.totalPlaySeconds += time;
-  if (state.mode === "fixed") {
-    const completed = stats.completed[state.difficulty];
-    if (!completed.includes(state.levelIndex)) completed.push(state.levelIndex);
-  } else {
-    stats.endlessSolved += 1;
-  }
   saveStats();
   renderStatus();
   renderStats();
-
+  elements.winEyebrow.textContent = eyebrow;
+  elements.winTitle.textContent = title;
+  elements.winDescription.textContent = description;
   elements.resultTime.textContent = formatTime(time);
   elements.resultBest.textContent = formatTime(stats.bestTimes[key]);
-  elements.continueButton.textContent = state.mode === "fixed" ? "Nächstes Level" : "Neue Endlos-Aufgabe";
+  elements.continueButton.textContent = continueText;
   openDialog(elements.winDialog);
   if (isBest) showToast("Neue Bestzeit!");
+}
+
+function syncSecretUnlockAfterNormalProgress() {
+  const unlocked = isSecretModeUnlocked(stats.completed);
+  if (!unlocked) return;
+  const wasUnlocked = stats.secret.unlocked;
+  stats.secret.unlocked = true;
+  if (!wasUnlocked && !stats.secret.unlockNoticeShown) state.pendingUnlockNotice = true;
+}
+
+function completeFixedLevel() {
+  const completed = stats.completed[state.difficulty];
+  if (!completed.includes(state.levelIndex)) completed.push(state.levelIndex);
+  stats.totalSolved += 1;
+  syncSecretUnlockAfterNormalProgress();
+  recordTimeAndOpenWin({
+    eyebrow: "Aufgabe geschafft",
+    title: "Perfekt eingepasst!",
+    description: "Jedes Feld ist belegt und alle Vorlagen stimmen.",
+    continueText: "Nächstes Level",
+  });
+}
+
+function completeSecretBoss() {
+  if (!stats.secret.completed[state.bossId]) {
+    stats.secret.completed[state.bossId] = true;
+    stats.totalSolved += 1;
+  }
+  recordTimeAndOpenWin({
+    eyebrow: "Secret Level geschafft",
+    title: `${BOSS_CONFIG[state.bossId].label} besiegt!`,
+    description: state.bossId === "absolute"
+      ? "Der letzte König ist zerfallen. Alle Secret Level sind beendet."
+      : "Du hast den veränderten Boss-Puzzleplan vollständig gelöst.",
+    continueText: "Secret-Level-Auswahl",
+  });
+}
+
+async function checkProgress() {
+  if (state.inputLocked || state.solved) return;
+  const boardComplete = state.model.validateCompletedBoard(clonePlacements(), state.puzzle.clues);
+  if (state.mode === "fixed") {
+    if (boardComplete) completeFixedLevel();
+    return;
+  }
+  if (isAbsoluteBoss(state.boss)) {
+    if (shouldStartAbsoluteAttack(state.boss, state.placed.size, currentPieces().length)) {
+      await runAbsoluteAttack();
+      return;
+    }
+    if (canFinishBoss(state.boss, boardComplete)) completeSecretBoss();
+    return;
+  }
+  if (shouldStartNormalAttack(state.boss, state.placed.size, currentPieces().length)) {
+    await runNormalBossTheft();
+    return;
+  }
+  if (shouldStartFalseEnding(state.boss, boardComplete)) {
+    await runFalseEnding();
+    return;
+  }
+  if (canFinishBoss(state.boss, boardComplete)) completeSecretBoss();
+}
+
+function configureBossArena(position = "top") {
+  const config = BOSS_CONFIG[state.bossId];
+  elements.bossArena.className = "boss-arena";
+  elements.bossArena.dataset.boss = state.bossId;
+  elements.bossArena.dataset.position = position;
+  elements.bossArena.dataset.damage = String(state.boss?.hits ?? 0);
+  elements.bossArena.style.setProperty("--boss-color", config.color);
+  elements.bossArena.style.setProperty("--boss-accent", config.accent);
+  elements.bossArena.classList.toggle("is-absolute", state.bossId === "absolute");
+  elements.bossArena.setAttribute("aria-hidden", "false");
+}
+
+function hideBossArena() {
+  window.clearTimeout(bossHitTimer);
+  bossHitTimer = null;
+  bossHitResolver = null;
+  if (!elements.bossArena) return;
+  elements.bossArena.className = "boss-arena";
+  elements.bossArena.removeAttribute("data-position");
+  elements.bossArena.setAttribute("aria-hidden", "true");
+  elements.bossCreature.tabIndex = -1;
+}
+
+function setInputLocked(locked) {
+  state.inputLocked = locked;
+  elements.body.classList.toggle("boss-sequence-active", locked);
+  renderTray();
+  renderStatus();
+}
+
+function markStolenPiece(pieceId, position) {
+  const stealVector = {
+    left: ["-95px", "-25px"],
+    right: ["95px", "-25px"],
+    top: ["0px", "-95px"],
+  }[position] ?? ["0px", "-90px"];
+  elements.gameBoard.querySelectorAll(`[data-owner="${pieceId}"]`).forEach((cell) => {
+    cell.style.setProperty("--steal-x", stealVector[0]);
+    cell.style.setProperty("--steal-y", stealVector[1]);
+    cell.classList.add("being-stolen");
+  });
+}
+
+function applyMutation(plan, absoluteMiss = false) {
+  state.placed.delete(plan.stolen.piece.id);
+  state.puzzle = {
+    ...state.puzzle,
+    pieces: plan.pieces,
+    clues: plan.clues,
+    solution: plan.solution,
+    model: plan.model,
+  };
+  state.model = plan.model;
+  state.history = [];
+  state.selectedPieceId = null;
+  state.preview = null;
+  state.pickedUpPieceId = null;
+  state.rotation = 0;
+  state.flipped = false;
+  if (absoluteMiss) recordAbsoluteMiss(state.boss, plan.stolen);
+  else recordTheft(state.boss, plan.stolen);
+  renderAll();
+}
+
+async function runNormalBossTheft() {
+  const plan = state.boss.pendingMutation ?? buildBossMutationPlan(clonePlacements());
+  if (!plan) {
+    setBoardMessage("Der Bossangriff wurde sicher abgebrochen. Ordne die letzten Teile neu.", true);
+    return;
+  }
+  const position = ["right", "left", "top"][state.boss.thefts.length % 3];
+  setInputLocked(true);
+  configureBossArena(position);
+  elements.bossArena.classList.add("visible");
+  await wait(650);
+  elements.bossArena.classList.add("targeting", "grinning");
+  await wait(620);
+  markStolenPiece(plan.stolen.piece.id, position);
+  elements.bossArena.classList.add("stealing");
+  await wait(820);
+  applyMutation(plan, false);
+  setBoardMessage(`Der Boss hat ${plan.stolen.piece.name} gestohlen und ${plan.replacement.name} zurückgelassen.`);
+  showToast(`Bossangriff ${state.boss.thefts.length} von ${NORMAL_BOSS_THEFTS}`);
+  await wait(520);
+  hideBossArena();
+  setInputLocked(false);
+}
+
+function chooseAbsolutePosition() {
+  const previous = state.boss.lastPosition;
+  const available = ABSOLUTE_POSITIONS.filter((position) => position !== previous);
+  const values = new Uint32Array(1);
+  globalThis.crypto?.getRandomValues?.(values);
+  const position = available[(values[0] || state.boss.attackCount) % available.length];
+  state.boss.lastPosition = position;
+  return position;
+}
+
+function waitForBossHit(milliseconds) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (hit) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(bossHitTimer);
+      bossHitTimer = null;
+      bossHitResolver = null;
+      state.boss.attackWindow = false;
+      elements.bossArena.classList.remove("attack-window");
+      elements.bossCreature.tabIndex = -1;
+      resolve(hit);
+    };
+    bossHitResolver = () => finish(true);
+    bossHitTimer = window.setTimeout(() => finish(false), milliseconds);
+    state.boss.attackWindow = true;
+    elements.bossArena.classList.add("attack-window");
+    elements.bossCreature.tabIndex = 0;
+    elements.bossCreature.focus({ preventScroll: true });
+  });
+}
+
+async function animateAbsoluteHit() {
+  const nextHit = state.boss.hits + 1;
+  elements.bossArena.classList.add("hit");
+  if (nextHit === 1) elements.bossArena.classList.add("crown-fly");
+  await wait(nextHit === 1 ? 950 : 680);
+  recordAbsoluteHit(state.boss);
+  elements.bossArena.dataset.damage = String(state.boss.hits);
+  elements.bossArena.classList.remove("hit", "crown-fly");
+
+  if (state.boss.dead) {
+    elements.bossArena.classList.add("dying");
+    setBoardMessage("Der Endboss zerbricht …");
+    await wait(3100);
+    hideBossArena();
+    setInputLocked(false);
+    setBoardMessage("Absolut ist besiegt. Fülle jetzt das aktuelle Spielfeld vollständig.");
+    renderStatus();
+    if (state.model.validateCompletedBoard(clonePlacements(), state.puzzle.clues)) completeSecretBoss();
+    return;
+  }
+
+  setBoardMessage(`Treffer ${state.boss.hits} von ${ABSOLUTE_HITS_TO_WIN}! Der Boss wird wütender.`);
+  await wait(520);
+  hideBossArena();
+  await wait(900);
+  await runAbsoluteAttack({ alreadyLocked: true });
+}
+
+async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
+  if (state.boss.dead || state.solved) {
+    if (alreadyLocked) setInputLocked(false);
+    return;
+  }
+  const plan = buildBossMutationPlan(clonePlacements());
+  if (!plan) {
+    setBoardMessage("Das Portal bleibt geschlossen: Ordne die letzten Teile neu, damit der Kampf lösbar bleibt.", true);
+    if (alreadyLocked) setInputLocked(false);
+    return;
+  }
+
+  if (!alreadyLocked) setInputLocked(true);
+  const position = chooseAbsolutePosition();
+  configureBossArena(position);
+  elements.bossArena.classList.add("portal-open");
+  await wait(520);
+  elements.bossArena.classList.add("visible");
+  await wait(620);
+  elements.bossArena.classList.add("targeting", "grinning");
+  setBoardMessage("Der Boss fixiert einen Stein …");
+  const hit = await waitForBossHit(absoluteReactionWindow(state.boss.hits));
+
+  if (hit) {
+    await animateAbsoluteHit();
+    return;
+  }
+
+  markStolenPiece(plan.stolen.piece.id, position);
+  elements.bossArena.classList.add("stealing");
+  await wait(820);
+  applyMutation(plan, true);
+  setBoardMessage(`Zu spät! Absolut hat ${plan.stolen.piece.name} durch ${plan.replacement.name} ersetzt.`);
+  showToast(`Angriff verpasst · ${state.boss.hits} von ${ABSOLUTE_HITS_TO_WIN} Treffern bleiben erhalten`);
+  await wait(520);
+  hideBossArena();
+  setInputLocked(false);
+}
+
+async function runFalseEnding() {
+  let finalPuzzle;
+  try {
+    finalPuzzle = createFinalBoardPlan({ puzzle: state.puzzle, stolen: state.boss.thefts });
+  } catch (error) {
+    setBoardMessage(error.message, true);
+    return;
+  }
+
+  setInputLocked(true);
+  configureBossArena("top");
+  elements.bossArena.classList.add("visible", "grinning");
+  setBoardMessage("Der Boss ist noch nicht besiegt …");
+  await wait(720);
+  elements.boardWrap.classList.add("board-pull");
+  await wait(780);
+  state.puzzle = finalPuzzle;
+  state.model = finalPuzzle.model;
+  state.placed.clear();
+  state.history = [];
+  state.selectedPieceId = null;
+  state.preview = null;
+  state.pickedUpPieceId = null;
+  beginFinalBoard(state.boss);
+  renderAll();
+  elements.boardWrap.classList.remove("board-pull");
+  setBoardMessage("Der Boss hat das Feld vergrößert und alle drei gestohlenen Steine zurückgegeben. Löse alles neu!");
+  showToast("Falsches Ende: 13 Steine · 65 Felder", 4200);
+  await wait(650);
+  hideBossArena();
+  setInputLocked(false);
 }
 
 function renderTemplate() {
   const cellOwners = new Map();
   state.puzzle.clues.forEach((clue) => {
-    placementCells(clue).forEach((cell) => cellOwners.set(cell, clue.pieceId));
+    state.model.placementCells(clue).forEach((cell) => cellOwners.set(cell, clue.pieceId));
   });
-
   elements.templateBoard.replaceChildren();
   for (let index = 0; index < BOARD_ROWS * BOARD_COLS; index += 1) {
     const cell = document.createElement("span");
@@ -474,8 +900,8 @@ function renderTemplate() {
     const owner = cellOwners.get(index);
     if (owner) {
       cell.classList.add("filled");
-      cell.style.setProperty("--piece-color", getPiece(owner).color);
-      cell.title = getPiece(owner).name;
+      cell.style.setProperty("--piece-color", currentPiece(owner).color);
+      cell.title = currentPiece(owner).name;
     }
     elements.templateBoard.append(cell);
   }
@@ -484,22 +910,33 @@ function renderTemplate() {
 function renderBoard() {
   const occupied = new Map();
   state.placed.forEach((placement) => {
-    placementCells(placement).forEach((cell) => occupied.set(cell, placement.pieceId));
+    state.model.placementCells(placement).forEach((cell) => occupied.set(cell, placement.pieceId));
   });
   const clueIds = new Set(state.puzzle.clues.map((clue) => clue.pieceId));
-  const previewCells = state.preview ? new Set(placementCells(state.preview.placement)) : new Set();
+  const previewCells = state.preview ? new Set(state.model.placementCells(state.preview.placement)) : new Set();
 
+  elements.gameBoard.style.setProperty("--board-cols", state.model.cols);
+  elements.gameBoard.style.setProperty("--board-rows", state.model.rows);
+  elements.gameBoard.setAttribute("aria-label", `Spielfeld mit ${state.model.rows} Reihen und ${state.model.cols} Spalten`);
   elements.gameBoard.replaceChildren();
-  for (let index = 0; index < BOARD_ROWS * BOARD_COLS; index += 1) {
+  for (let index = 0; index < state.model.rows * state.model.cols; index += 1) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "board-cell";
     button.dataset.cell = String(index);
     button.setAttribute("role", "gridcell");
+    if (!state.model.activeCells.has(index)) {
+      button.classList.add("board-void");
+      button.disabled = true;
+      button.tabIndex = -1;
+      elements.gameBoard.append(button);
+      continue;
+    }
     const owner = occupied.get(index);
     if (owner) {
-      const piece = getPiece(owner);
+      const piece = currentPiece(owner);
       button.classList.add("filled");
+      button.dataset.owner = owner;
       if (clueIds.has(owner)) button.classList.add("clue-piece");
       button.style.setProperty("--piece-color", piece.color);
       button.title = `${piece.name} aufnehmen`;
@@ -509,14 +946,14 @@ function renderBoard() {
     }
     if (previewCells.has(index)) {
       button.classList.add("preview-piece");
-      button.style.setProperty("--selected-color", getPiece(state.preview.placement.pieceId).color);
+      button.style.setProperty("--selected-color", currentPiece(state.preview.placement.pieceId).color);
     }
     elements.gameBoard.append(button);
   }
 }
 
 function miniPiece(pieceId, variantIndex = 0) {
-  const variant = getVariants(pieceId)[variantIndex] ?? getVariants(pieceId)[0];
+  const variant = currentVariants(pieceId)[variantIndex] ?? currentVariants(pieceId)[0];
   const maxRow = Math.max(...variant.map(([row]) => row));
   const maxCol = Math.max(...variant.map(([, col]) => col));
   const wrapper = document.createElement("span");
@@ -535,10 +972,11 @@ function miniPiece(pieceId, variantIndex = 0) {
 }
 
 function renderTray() {
+  if (!state.puzzle || !state.model) return;
   const clueIds = new Set(state.puzzle.clues.map((clue) => clue.pieceId));
   const templateFinished = cluePhaseComplete();
   elements.pieceTray.replaceChildren();
-  PIECES.forEach((piece) => {
+  currentPieces().forEach((piece) => {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "piece-card";
@@ -547,16 +985,15 @@ function renderTray() {
     const placed = state.placed.get(piece.id);
     const locked = !clueIds.has(piece.id) && !templateFinished && !placed;
     if (placed) card.classList.add("placed");
-    if (locked) {
-      card.classList.add("locked");
+    if (piece.bossPiece) card.classList.add("boss-piece");
+    if (locked || state.inputLocked) {
+      card.classList.toggle("locked", locked);
       card.disabled = true;
-      card.title = "Wird nach der vollständigen Vorlage freigeschaltet";
+      card.title = locked ? "Wird nach der vollständigen Vorlage freigeschaltet" : "Bossanimation läuft";
     }
     if (state.selectedPieceId === piece.id) card.classList.add("selected");
     if (clueIds.has(piece.id)) card.classList.add("is-clue");
-    const variantIndex = state.selectedPieceId === piece.id
-      ? selectedVariant().index
-      : placed?.variant ?? 0;
+    const variantIndex = state.selectedPieceId === piece.id ? selectedVariant().index : placed?.variant ?? 0;
     card.append(miniPiece(piece.id, variantIndex));
     const name = document.createElement("strong");
     name.textContent = piece.name;
@@ -567,51 +1004,83 @@ function renderTray() {
     elements.pieceTray.append(card);
   });
 
-  const selected = state.selectedPieceId ? getPiece(state.selectedPieceId) : null;
+  const selected = state.selectedPieceId ? currentPiece(state.selectedPieceId) : null;
   elements.selectedPieceLabel.textContent = selected ? `${selected.name} ausgewählt` : "Teil auswählen";
-  elements.rotateButton.disabled = !selected;
-  elements.flipButton.disabled = !selected;
+  elements.rotateButton.disabled = !selected || state.inputLocked;
+  elements.flipButton.disabled = !selected || state.inputLocked;
   elements.mobileSelectedPieceLabel.textContent = selected?.name ?? "Kein Teil";
-  elements.mobileRotateButton.disabled = !selected;
-  elements.mobileFlipButton.disabled = !selected;
-  elements.mobileCancelButton.disabled = !selected;
+  elements.mobileRotateButton.disabled = !selected || state.inputLocked;
+  elements.mobileFlipButton.disabled = !selected || state.inputLocked;
+  elements.mobileCancelButton.disabled = !selected || state.inputLocked;
   elements.mobileActionBar.classList.remove("hidden");
   elements.mobileActionBar.classList.toggle("has-selection", Boolean(selected));
   elements.body.classList.toggle("piece-selected", Boolean(selected));
 }
 
 function renderStatus() {
+  if (!state.puzzle || !state.model) return;
   const completed = stats.completed[state.difficulty];
   const fixedSolved = DIFFICULTY_ORDER.reduce((sum, difficulty) => sum + stats.completed[difficulty].length, 0);
+  const secretUnlocked = isSecretModeUnlocked(stats.completed);
 
   elements.modeSelector.querySelectorAll("[data-mode]").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === state.mode);
   });
+  elements.secretModeButton.classList.toggle("locked", !secretUnlocked);
+  elements.secretModeLock.textContent = secretUnlocked ? "🔓" : "🔒";
+  elements.secretModeButton.setAttribute("aria-label", `Secret Level, ${secretUnlocked ? "freigeschaltet" : "gesperrt"}`);
+  elements.difficultyControls.classList.toggle("hidden", state.mode === "secret");
+  elements.fixedLevelControls.classList.toggle("hidden", state.mode !== "fixed");
+  elements.secretStatusControls.classList.toggle("hidden", state.mode !== "secret");
+  elements.gamePanel.classList.toggle("secret-active", state.mode === "secret");
+  elements.gamePanel.classList.toggle("secret-final", Boolean(state.puzzle.finalBoard));
+
   elements.difficultySelector.querySelectorAll("[data-difficulty]").forEach((button) => {
     button.classList.toggle("active", button.dataset.difficulty === state.difficulty);
   });
   elements.difficultyHint.textContent = DIFFICULTIES[state.difficulty].description;
-  elements.fixedLevelControls.classList.toggle("hidden", state.mode !== "fixed");
-  elements.endlessControls.classList.toggle("hidden", state.mode !== "endless");
   elements.levelNumber.textContent = String(state.levelIndex + 1).padStart(2, "0");
   elements.levelPickerButton.setAttribute("aria-label", `Level ${state.levelIndex + 1} auswählen`);
   elements.levelProgressText.textContent = `${completed.length} / ${FIXED_LEVELS_PER_DIFFICULTY} geschafft`;
   elements.progressBar.style.width = `${(completed.length / FIXED_LEVELS_PER_DIFFICULTY) * 100}%`;
   elements.previousLevel.disabled = state.levelIndex === 0;
   elements.nextLevel.disabled = state.levelIndex === FIXED_LEVELS_PER_DIFFICULTY - 1;
-  elements.endlessRound.textContent = `Runde ${state.endlessRound}`;
+
+  if (state.mode === "secret") {
+    elements.secretBossName.textContent = BOSS_CONFIG[state.bossId].label;
+    if (isAbsoluteBoss(state.boss)) {
+      elements.secretBossStatus.textContent = state.boss.dead
+        ? "Boss besiegt · Puzzle beenden"
+        : `Treffer ${state.boss.hits} / ${ABSOLUTE_HITS_TO_WIN}`;
+    } else if (state.boss.phase === "final") {
+      elements.secretBossStatus.textContent = "Finales Brett · 13 Steine";
+    } else {
+      elements.secretBossStatus.textContent = `Bossangriffe ${state.boss.thefts.length} / ${NORMAL_BOSS_THEFTS}`;
+    }
+    elements.challengeEyebrow.textContent = `Secret Level · ${BOSS_CONFIG[state.bossId].label}`;
+    elements.challengeTitle.textContent = state.puzzle.finalBoard ? "Das Feld wächst." : "Besiege den Boss.";
+    elements.challengeDescription.textContent = isAbsoluteBoss(state.boss)
+      ? "Achte auf wechselnde Portale. Der Boss selbst verrät dir, wann du eingreifen kannst."
+      : "Löse das Puzzle weiter, auch wenn der Boss deine Anordnung dreimal verändert.";
+  } else {
+    elements.challengeEyebrow.textContent = "Deine Herausforderung";
+    elements.challengeTitle.textContent = "Fülle jedes Feld.";
+    elements.challengeDescription.textContent = "Lege zuerst alle Teile exakt wie auf der Vorlage. Erst danach werden die übrigen Teile freigeschaltet – fülle das Feld ohne Lücken und Überlappungen.";
+  }
+
   elements.clueCount.textContent = String(state.puzzle.clues.length);
-  elements.placedCounter.textContent = `${state.placed.size} / ${PIECES.length} Teile`;
+  elements.placedCounter.textContent = `${state.placed.size} / ${currentPieces().length} Teile`;
   elements.headerSolved.textContent = String(stats.totalSolved);
-  elements.undoButton.disabled = state.history.length === 0 || state.solved;
-  elements.resetButton.disabled = state.placed.size === 0 || state.solved;
+  elements.undoButton.disabled = state.history.length === 0 || interactionBlocked();
+  elements.resetButton.disabled = state.placed.size === 0 || interactionBlocked();
   elements.statsPercent.textContent = `${Math.round((fixedSolved / (FIXED_LEVELS_PER_DIFFICULTY * DIFFICULTY_ORDER.length)) * 100)} %`;
 }
 
 function renderStats() {
   const fixedSolved = DIFFICULTY_ORDER.reduce((sum, difficulty) => sum + stats.completed[difficulty].length, 0);
+  const secretSolved = Object.values(stats.secret.completed).filter(Boolean).length;
   elements.statsSolved.textContent = String(stats.totalSolved);
-  elements.statsEndless.textContent = String(stats.endlessSolved);
+  elements.statsSecret.textContent = `${secretSolved} / 5`;
   elements.statsPlayTime.textContent = formatTime(stats.totalPlaySeconds);
   elements.statsPercent.textContent = `${Math.round((fixedSolved / (FIXED_LEVELS_PER_DIFFICULTY * DIFFICULTY_ORDER.length)) * 100)} %`;
   elements.difficultyStats.replaceChildren();
@@ -626,20 +1095,11 @@ function renderStats() {
 
 function renderLevelPicker() {
   const completed = stats.completed[state.difficulty];
-  const items = createLevelPickerItems(
-    FIXED_LEVELS_PER_DIFFICULTY,
-    state.levelIndex,
-    completed,
-  );
-
+  const items = createLevelPickerItems(FIXED_LEVELS_PER_DIFFICULTY, state.levelIndex, completed);
   elements.levelPickerDifficulty.textContent = DIFFICULTIES[state.difficulty].label;
   elements.levelPickerProgress.textContent = `${completed.length} von ${FIXED_LEVELS_PER_DIFFICULTY} geschafft`;
-  elements.levelPickerGrid.setAttribute(
-    "aria-label",
-    `${DIFFICULTIES[state.difficulty].label}: Level 1 bis ${FIXED_LEVELS_PER_DIFFICULTY}`,
-  );
+  elements.levelPickerGrid.setAttribute("aria-label", `${DIFFICULTIES[state.difficulty].label}: Level 1 bis ${FIXED_LEVELS_PER_DIFFICULTY}`);
   elements.levelPickerGrid.replaceChildren();
-
   items.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -648,11 +1108,35 @@ function renderLevelPicker() {
     button.classList.toggle("completed", item.completed);
     button.classList.toggle("current", item.current);
     button.setAttribute("aria-current", item.current ? "page" : "false");
-    button.setAttribute(
-      "aria-label",
-      `Level ${item.number}${item.current ? ", aktuell" : ""}${item.completed ? ", geschafft" : ""}`,
-    );
+    button.setAttribute("aria-label", `Level ${item.number}${item.current ? ", aktuell" : ""}${item.completed ? ", geschafft" : ""}`);
     elements.levelPickerGrid.append(button);
+  });
+}
+
+function renderSecretPicker() {
+  const items = createBossSelectionItems(stats.completed, stats.secret);
+  elements.secretBossGrid.replaceChildren();
+  items.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secret-boss-card";
+    button.dataset.boss = item.id;
+    button.style.setProperty("--boss-card-color", item.color);
+    button.classList.toggle("locked", !item.unlocked);
+    button.classList.toggle("completed", item.completed);
+    button.setAttribute("aria-label", `${item.label}, ${item.completed ? "besiegt" : item.unlocked ? "freigeschaltet" : "gesperrt"}`);
+    const face = document.createElement("span");
+    face.className = "boss-card-face";
+    face.innerHTML = "<i></i><span></span>";
+    const lock = document.createElement("span");
+    lock.className = "boss-card-lock";
+    lock.textContent = item.completed ? "✓" : item.unlocked ? "🔓" : "🔒";
+    const name = document.createElement("strong");
+    name.textContent = item.label;
+    const subtitle = document.createElement("small");
+    subtitle.textContent = item.completed ? "Besiegt" : item.unlocked ? item.personality : "Gesperrt";
+    button.append(face, lock, name, subtitle);
+    elements.secretBossGrid.append(button);
   });
 }
 
@@ -665,14 +1149,17 @@ function renderAll() {
   updateTimer();
 }
 
-function updateTimer() {
-  if (!state.solved) {
-    state.elapsedSeconds = Math.floor((performance.now() - state.startedAt) / 1000);
-  }
-}
-
 function openDialog(dialog) {
   if (!dialog.open) dialog.showModal();
+}
+
+function openSecretPicker() {
+  if (!isSecretModeUnlocked(stats.completed)) {
+    showSecretNotice(secretModeLockMessage());
+    return;
+  }
+  renderSecretPicker();
+  openDialog(elements.secretPickerDialog);
 }
 
 function moveLevel(delta) {
@@ -681,7 +1168,7 @@ function moveLevel(delta) {
   state.levelIndex = next;
   stats.currentLevel[state.difficulty] = next;
   saveStats();
-  loadPuzzle();
+  loadFixedPuzzle();
 }
 
 function chooseLevel(levelIndex) {
@@ -691,15 +1178,7 @@ function chooseLevel(levelIndex) {
   state.levelIndex = levelIndex;
   stats.currentLevel[state.difficulty] = levelIndex;
   saveStats();
-  loadPuzzle();
-}
-
-function nextEndlessPuzzle(incrementRound = true) {
-  if (incrementRound) state.endlessRound += 1;
-  state.endlessSeed = randomSeed();
-  stats.endlessRound = state.endlessRound;
-  saveStats();
-  loadPuzzle();
+  loadFixedPuzzle();
 }
 
 function boardPointFromPointer(clientX, clientY, pointerType) {
@@ -709,15 +1188,10 @@ function boardPointFromPointer(clientX, clientY, pointerType) {
     const liftedY = clientY - TOUCH_PREVIEW_LIFT;
     if (liftedY >= boardRect.top && liftedY <= boardRect.bottom) targetY = liftedY;
   }
-  if (
-    clientX < boardRect.left
-    || clientX > boardRect.right
-    || targetY < boardRect.top
-    || targetY > boardRect.bottom
-  ) return null;
+  if (clientX < boardRect.left || clientX > boardRect.right || targetY < boardRect.top || targetY > boardRect.bottom) return null;
   return {
-    row: ((targetY - boardRect.top) / boardRect.height) * BOARD_ROWS,
-    col: ((clientX - boardRect.left) / boardRect.width) * BOARD_COLS,
+    row: ((targetY - boardRect.top) / boardRect.height) * state.model.rows,
+    col: ((clientX - boardRect.left) / boardRect.width) * state.model.cols,
   };
 }
 
@@ -725,14 +1199,14 @@ function createDragGhost(pieceId, pointerAnchor) {
   dragGhost?.remove();
   const variant = selectedVariant();
   if (!variant) return;
-  const boardCell = elements.gameBoard.querySelector(".board-cell");
+  const boardCell = elements.gameBoard.querySelector(".board-cell:not(.board-void)");
   const boardUnit = boardCell?.getBoundingClientRect().width ?? 28;
-  const unit = Math.max(22, Math.min(34, boardUnit));
+  const unit = Math.max(18, Math.min(34, boardUnit));
   const maxRow = Math.max(...variant.cells.map(([row]) => row));
   const maxCol = Math.max(...variant.cells.map(([, col]) => col));
   dragGhost = document.createElement("div");
   dragGhost.className = "drag-ghost";
-  dragGhost.style.setProperty("--piece-color", getPiece(pieceId).color);
+  dragGhost.style.setProperty("--piece-color", currentPiece(pieceId).color);
   dragGhost.style.setProperty("--drag-unit", `${unit}px`);
   dragGhost.style.width = `${(maxCol + 1) * unit}px`;
   dragGhost.style.height = `${(maxRow + 1) * unit}px`;
@@ -758,7 +1232,7 @@ function moveDragGhost(clientX, clientY, pointerType) {
 }
 
 function beginPotentialDrag(event, pieceId, source, sourceCellIndex = null) {
-  if (state.solved || dragSession || (event.pointerType === "mouse" && event.button !== 0)) return;
+  if (interactionBlocked() || dragSession || (event.pointerType === "mouse" && event.button !== 0)) return;
   dragSession = {
     pointerId: event.pointerId,
     pointerType: event.pointerType,
@@ -773,25 +1247,21 @@ function beginPotentialDrag(event, pieceId, source, sourceCellIndex = null) {
 }
 
 function activateDrag(event) {
-  if (!dragSession || dragSession.active) return;
+  if (!dragSession || dragSession.active || state.inputLocked) return;
   const originalPlacement = state.placed.get(dragSession.pieceId);
   if (dragSession.source === "board" && originalPlacement) {
-    const boardRow = Math.floor(dragSession.sourceCellIndex / BOARD_COLS);
-    const boardCol = dragSession.sourceCellIndex % BOARD_COLS;
+    const boardRow = Math.floor(dragSession.sourceCellIndex / state.model.cols);
+    const boardCol = dragSession.sourceCellIndex % state.model.cols;
     dragSession.pointerAnchor = {
       row: boardRow - originalPlacement.row + 0.5,
       col: boardCol - originalPlacement.col + 0.5,
     };
   }
-
-  if (state.selectedPieceId !== dragSession.pieceId || originalPlacement) {
-    selectPiece(dragSession.pieceId);
-  }
+  if (state.selectedPieceId !== dragSession.pieceId || originalPlacement) selectPiece(dragSession.pieceId);
   if (state.selectedPieceId !== dragSession.pieceId) {
     dragSession = null;
     return;
   }
-
   const variant = selectedVariant();
   dragSession.pointerAnchor ??= pointerAnchorForPlacement(variant.cells);
   dragSession.active = true;
@@ -801,24 +1271,19 @@ function activateDrag(event) {
 }
 
 function updateActiveDrag(event) {
-  if (!dragSession?.active) return;
+  if (!dragSession?.active || state.inputLocked) return;
   moveDragGhost(event.clientX, event.clientY, dragSession.pointerType);
   const point = boardPointFromPointer(event.clientX, event.clientY, dragSession.pointerType);
-  const placement = point === null
-    ? null
-    : {
-      pieceId: state.selectedPieceId,
-      variant: selectedVariant().index,
-      ...placementFromBoardPoint(point, dragSession.pointerAnchor),
-    };
-  const key = placement
-    ? `${placement.pieceId}:${placement.variant}:${placement.row}:${placement.col}`
-    : "outside";
+  const placement = point === null ? null : {
+    pieceId: state.selectedPieceId,
+    variant: selectedVariant().index,
+    ...placementFromBoardPoint(point, dragSession.pointerAnchor),
+  };
+  const key = placement ? `${placement.pieceId}:${placement.variant}:${placement.row}:${placement.col}` : "outside";
   if (state.preview?.key !== key) {
     state.preview = placement ? { key, placement } : null;
     renderBoard();
   }
-
   if (dragSession.pointerType === "touch") {
     const edge = 54;
     if (event.clientY < edge) window.scrollBy(0, -12);
@@ -832,24 +1297,18 @@ function finishDrag(event, cancelled = false) {
     dragSession = null;
     return;
   }
-
   if (!cancelled) updateActiveDrag(event);
   const candidate = !cancelled ? state.preview?.placement : null;
-  const validation = candidate
-    ? validateCandidate(candidate)
-    : { valid: false, reason: "Ziehe den Stein vollständig auf das Spielfeld." };
-
+  const validation = candidate ? validateCandidate(candidate) : { valid: false, reason: "Ziehe den Stein vollständig auf das Spielfeld." };
   dragGhost?.remove();
   dragGhost = null;
   elements.body.classList.remove("dragging-piece");
   suppressClickUntil = performance.now() + 400;
   dragSession = null;
-
   if (validation.valid) {
     placeCandidate(candidate);
     return;
   }
-
   state.preview = null;
   if (state.pickedUpPieceId === state.selectedPieceId) {
     cancelSelection({ restorePickedUp: true });
@@ -863,19 +1322,20 @@ function finishDrag(event, cancelled = false) {
 
 elements.modeSelector.addEventListener("click", (event) => {
   const button = event.target.closest("[data-mode]");
-  if (!button || button.dataset.mode === state.mode) return;
-  state.mode = button.dataset.mode;
-  if (state.mode === "endless") state.endlessSeed = randomSeed();
-  loadPuzzle();
+  if (!button) return;
+  if (button.dataset.mode === "secret") {
+    openSecretPicker();
+    return;
+  }
+  if (state.mode !== "fixed") loadFixedPuzzle();
 });
 
 elements.difficultySelector.addEventListener("click", (event) => {
   const button = event.target.closest("[data-difficulty]");
-  if (!button || button.dataset.difficulty === state.difficulty) return;
+  if (!button || button.dataset.difficulty === state.difficulty || state.mode !== "fixed") return;
   state.difficulty = button.dataset.difficulty;
   state.levelIndex = stats.currentLevel[state.difficulty];
-  if (state.mode === "endless") state.endlessSeed = randomSeed();
-  loadPuzzle();
+  loadFixedPuzzle();
 });
 
 elements.previousLevel.addEventListener("click", () => moveLevel(-1));
@@ -886,10 +1346,13 @@ elements.levelPickerButton.addEventListener("click", () => {
 });
 elements.levelPickerGrid.addEventListener("click", (event) => {
   const button = event.target.closest("[data-level-index]");
-  if (!button) return;
-  chooseLevel(Number(button.dataset.levelIndex));
+  if (button) chooseLevel(Number(button.dataset.levelIndex));
 });
-elements.newEndlessButton.addEventListener("click", () => nextEndlessPuzzle(true));
+elements.openSecretPickerButton.addEventListener("click", openSecretPicker);
+elements.secretBossGrid.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-boss]");
+  if (button) startSecretBoss(button.dataset.boss);
+});
 elements.undoButton.addEventListener("click", undo);
 elements.resetButton.addEventListener("click", resetBoard);
 elements.rotateButton.addEventListener("click", rotateSelected);
@@ -908,7 +1371,7 @@ elements.pieceTray.addEventListener("pointerdown", (event) => {
 
 elements.gameBoard.addEventListener("pointerdown", (event) => {
   const cell = event.target.closest("[data-cell]");
-  if (!cell) return;
+  if (!cell || cell.disabled) return;
   const cellIndex = Number(cell.dataset.cell);
   const placed = placementAtCell(cellIndex);
   if (placed) beginPotentialDrag(event, placed.pieceId, "board", cellIndex);
@@ -936,9 +1399,9 @@ elements.pieceTray.addEventListener("click", (event) => {
 });
 
 elements.gameBoard.addEventListener("click", (event) => {
-  if (performance.now() < suppressClickUntil) return;
+  if (performance.now() < suppressClickUntil || state.inputLocked) return;
   const cell = event.target.closest("[data-cell]");
-  if (!cell) return;
+  if (!cell || cell.disabled) return;
   const cellIndex = Number(cell.dataset.cell);
   const placed = placementAtCell(cellIndex);
   if (placed) pickUpPiece(placed.pieceId);
@@ -946,9 +1409,9 @@ elements.gameBoard.addEventListener("click", (event) => {
 });
 
 elements.gameBoard.addEventListener("mouseover", (event) => {
-  if (dragSession?.active) return;
+  if (dragSession?.active || state.inputLocked) return;
   const cell = event.target.closest("[data-cell]");
-  if (!cell || !state.selectedPieceId || state.solved) return;
+  if (!cell || cell.disabled || !state.selectedPieceId || state.solved) return;
   const placement = candidateFromCell(Number(cell.dataset.cell));
   const key = `${placement.pieceId}:${placement.variant}:${placement.row}:${placement.col}`;
   if (state.preview?.key === key) return;
@@ -957,9 +1420,31 @@ elements.gameBoard.addEventListener("mouseover", (event) => {
 });
 
 elements.gameBoard.addEventListener("mouseleave", () => {
-  if (!state.preview) return;
+  if (!state.preview || dragSession?.active) return;
   state.preview = null;
   renderBoard();
+});
+
+elements.bossCreature.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (state.boss?.attackWindow && bossHitResolver) bossHitResolver();
+});
+
+elements.bossCreature.addEventListener("keydown", (event) => {
+  if ((event.key === "Enter" || event.key === " ") && state.boss?.attackWindow && bossHitResolver) {
+    event.preventDefault();
+    bossHitResolver();
+  }
+});
+
+elements.bossCreature.addEventListener("pointermove", (event) => {
+  if (state.bossId !== "absolute") return;
+  const rect = elements.bossCreature.getBoundingClientRect();
+  const x = ((event.clientX - rect.left) / rect.width - 0.5) * 9;
+  const y = ((event.clientY - rect.top) / rect.height - 0.5) * 7;
+  elements.bossArena.style.setProperty("--look-x", `${x.toFixed(1)}px`);
+  elements.bossArena.style.setProperty("--look-y", `${y.toFixed(1)}px`);
 });
 
 elements.statsButton.addEventListener("click", () => {
@@ -978,13 +1463,22 @@ document.querySelectorAll("dialog").forEach((dialog) => {
   });
 });
 
+elements.winDialog.addEventListener("close", () => {
+  if (!state.pendingUnlockNotice) return;
+  state.pendingUnlockNotice = false;
+  stats.secret.unlockNoticeShown = true;
+  saveStats();
+  showSecretNotice("Gratulation, Spieler! Du hast Stufe Leicht abgeschlossen und die Secret Level freigeschaltet.");
+  renderStatus();
+});
+
 elements.continueButton.addEventListener("click", () => {
   elements.winDialog.close();
   if (state.mode === "fixed") {
     if (state.levelIndex < FIXED_LEVELS_PER_DIFFICULTY - 1) moveLevel(1);
     else showToast("Alle Levels dieser Schwierigkeit geschafft!");
   } else {
-    nextEndlessPuzzle(true);
+    openSecretPicker();
   }
 });
 
@@ -992,9 +1486,7 @@ document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, textarea, select")) return;
   if (event.key.toLowerCase() === "r") rotateSelected();
   if (event.key.toLowerCase() === "f") flipSelected();
-  if (event.key === "Escape" && state.selectedPieceId) {
-    cancelSelection({ restorePickedUp: true });
-  }
+  if (event.key === "Escape" && state.selectedPieceId) cancelSelection({ restorePickedUp: true });
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
     undo();
@@ -1002,4 +1494,13 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.setInterval(updateTimer, 250);
-loadPuzzle();
+saveStats();
+loadFixedPuzzle();
+
+if (showStartupUnlockNotice) {
+  window.setTimeout(() => {
+    stats.secret.unlockNoticeShown = true;
+    saveStats();
+    showSecretNotice("Gratulation, Spieler! Du hast Stufe Leicht abgeschlossen und die Secret Level freigeschaltet.");
+  }, 650);
+}

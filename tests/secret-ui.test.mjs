@@ -1,0 +1,37 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+const game = readFileSync(new URL("../game.js", import.meta.url), "utf8");
+
+test("Endless ist vollständig aus Oberfläche und Spielsteuerung entfernt", () => {
+  assert.doesNotMatch(html, /Endlos|data-mode="endless"/i);
+  assert.doesNotMatch(game, /endless/i);
+  assert.match(html, /data-mode="secret"/);
+});
+
+test("Portal gehört ausschließlich zur Absolut-Darstellung", () => {
+  assert.match(html, /class="boss-portal"/);
+  assert.match(css, /\.boss-portal\s*\{[^}]*display:\s*none/s);
+  assert.match(css, /\.boss-arena\.is-absolute \.boss-portal/);
+  assert.match(game, /classList\.toggle\("is-absolute", state\.bossId === "absolute"\)/);
+});
+
+test("Touchziel, mobile Bossansicht und Wiederfreigabe der Steuerung sind vorgesehen", () => {
+  assert.match(css, /@media \(max-width: 640px\)/);
+  assert.match(css, /\.boss-creature[\s\S]*width:\s*112px/);
+  assert.match(css, /\.boss-arena\.attack-window \.boss-creature[\s\S]*pointer-events:\s*auto/);
+  assert.match(game, /setInputLocked\(false\)/);
+  assert.match(game, /addEventListener\("pointerdown"/);
+});
+
+test("Krone, Risse und langsame Zerfallsanimation sind im Bossaufbau enthalten", () => {
+  assert.match(html, /boss-crown/);
+  assert.match(html, /boss-crack/);
+  assert.match(css, /@keyframes crown-fly/);
+  assert.match(css, /@keyframes boss-crumble/);
+  assert.match(css, /@keyframes eyes-last/);
+  assert.match(game, /classList\.add\("dying"\)/);
+});
