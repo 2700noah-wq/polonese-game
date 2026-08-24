@@ -35,3 +35,17 @@ test("Krone, Risse und langsame Zerfallsanimation sind im Bossaufbau enthalten",
   assert.match(css, /@keyframes eyes-last/);
   assert.match(game, /classList\.add\("dying"\)/);
 });
+
+test("Trefferstatus wird bei Absolut sofort aktualisiert", () => {
+  assert.match(
+    game,
+    /recordAbsoluteHit\(state\.boss\);\s*elements\.bossArena\.dataset\.damage = String\(state\.boss\.hits\);\s*renderStatus\(\);/,
+  );
+});
+
+test("isolierte 390-Pixel-Testansicht ist vorhanden", () => {
+  const mobilePreview = readFileSync(new URL("./mobile-preview.html", import.meta.url), "utf8");
+  assert.match(mobilePreview, /width:\s*390px/);
+  assert.match(mobilePreview, /height:\s*844px/);
+  assert.match(mobilePreview, /src="\.\.\/index\.html"/);
+});
