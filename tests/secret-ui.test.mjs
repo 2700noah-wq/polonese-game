@@ -49,3 +49,20 @@ test("isolierte 390-Pixel-Testansicht ist vorhanden", () => {
   assert.match(mobilePreview, /height:\s*844px/);
   assert.match(mobilePreview, /src="\.\.\/index\.html"/);
 });
+
+test("Secret Level blockiert keine legalen Spielerplatzierungen anhand der späteren Lösbarkeit", () => {
+  const validation = game.match(
+    /function validateSecretFuture\(placements\) \{[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.ok(validation);
+  assert.doesNotMatch(validation, /\.solve\(/);
+  assert.doesNotMatch(validation, /valid:\s*false/);
+  assert.doesNotMatch(game, /Dieser Zug blockiert das Secret Level/);
+  assert.match(validation, /pendingMutation = buildBossMutationPlan\(placements\)/);
+});
+
+test("nur geometrische Regeln und Vorlagen bleiben beim Platzieren verbindlich", () => {
+  assert.match(game, /Das Teil ragt über den Rand hinaus/);
+  assert.match(game, /Dort liegt bereits ein anderes Teil/);
+  assert.match(game, /Dieses Vorlagen-Teil muss exakt an die gezeigte Position/);
+});
