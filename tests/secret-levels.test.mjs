@@ -79,7 +79,7 @@ test("alle fünf benannten Bosse und die vorgegebenen Sperrmeldungen sind vorhan
     completed: Object.fromEntries(BOSS_ORDER.map((id) => [id, false])),
   });
   assert.deepEqual(items.map((item) => item.label), ["Leicht", "Mittel", "Schwer", "Polonesisch", "Absolut"]);
-  assert.equal(SECRET_NOTICE_MS, 7000);
+  assert.equal(SECRET_NOTICE_MS, 3000);
   assert.equal(secretModeLockMessage(), "Schließe zuerst alle Level von Stufe Leicht ab, um die Secret Level freizuschalten.");
   assert.equal(bossLockMessage("medium"), "Schließe zuerst alle Level von Stufe Mittel ab, um diesen Boss freizuschalten.");
   assert.equal(bossLockMessage("absolute"), "Besiege zuerst alle anderen Secret-Level-Bosse, um Absolut freizuschalten.");

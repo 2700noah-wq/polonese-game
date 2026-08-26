@@ -12,7 +12,7 @@ import {
   normalizeCells,
 } from "./puzzle-model.js";
 
-export const SECRET_NOTICE_MS = 7000;
+export const SECRET_NOTICE_MS = 3000;
 export const BOSS_ORDER = ["easy", "medium", "hard", "expert", "absolute"];
 
 export const BOSS_CONFIG = {

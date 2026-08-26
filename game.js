@@ -22,7 +22,7 @@ import {
   isSecretModeUnlocked,
   planNovelMutation,
   secretModeLockMessage,
-} from "./secret-levels.js?v=20260826-boss-solver-2";
+} from "./secret-levels.js?v=20260826-notice-3s-1";
 import {
   ABSOLUTE_HITS_TO_WIN,
   NORMAL_BOSS_THEFTS,
