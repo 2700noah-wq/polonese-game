@@ -223,25 +223,58 @@ function cellCoordinates(cells, cols) {
   return cells.map((cell) => [Math.floor(cell / cols), cell % cols]);
 }
 
-function sameCells(model, left, right) {
-  const leftKey = [...model.placementCells(left)].sort((a, b) => a - b).join(",");
-  const rightKey = [...model.placementCells(right)].sort((a, b) => a - b).join(",");
-  return leftKey === rightKey;
+function createMutationPiece(bossId, serial, cells) {
+  return {
+    id: `boss-${bossId}-mutation-${serial}`,
+    name: `Cień ${serial}`,
+    color: ["#15152d", "#7a1432", "#cb1b45", "#4b164c"][serial % 4],
+    role: "boss-custom",
+    bossPiece: true,
+    cells: cells.map((cell) => [...cell]),
+  };
 }
 
-function repositionGroups(retained, clues, preservePlaced, seed) {
-  if (preservePlaced) return [[]];
-  const clueIds = new Set(clues.map((clue) => clue.pieceId));
-  const movable = retained
-    .filter((placement) => !clueIds.has(placement.pieceId))
-    .sort((left, right) => hashSeed(`${seed}-${left.pieceId}`) - hashSeed(`${seed}-${right.pieceId}`));
-  const groups = movable.map((placement) => [placement.pieceId]);
-  for (let left = 0; left < movable.length; left += 1) {
-    for (let right = left + 1; right < movable.length; right += 1) {
-      groups.push([movable[left].pieceId, movable[right].pieceId]);
-    }
-  }
-  return groups;
+function validateMutationPlan({
+  puzzle,
+  stolenPlacement,
+  stolenPiece,
+  replacement,
+  fixed,
+  nextClues,
+  seed,
+  proposedSolution = null,
+}) {
+  const nextPieces = [
+    ...puzzle.pieces.filter((piece) => piece.id !== stolenPlacement.pieceId),
+    replacement,
+  ];
+  const model = createPuzzleModel({
+    pieces: nextPieces,
+    rows: puzzle.rows,
+    cols: puzzle.cols,
+    mask: puzzle.mask,
+  });
+  if (proposedSolution && !model.validateCompletedBoard(proposedSolution, nextClues)) return null;
+
+  // Alle sichtbaren, nicht gestohlenen Steine bleiben feste Solver-Vorgaben.
+  // Dadurch beschreibt die validierte Lösung exakt den Zustand, den der
+  // Spieler nach der Animation tatsächlich vor sich hat.
+  const locked = mergeRequiredClues(fixed, nextClues);
+  const solved = model.solve(locked, { limit: 1, seed });
+  if (!solved.solution || !model.validateCompletedBoard(solved.solution, nextClues)) return null;
+
+  return {
+    stolen: {
+      piece: { ...stolenPiece, cells: stolenPiece.cells.map((cell) => [...cell]) },
+      placement: { ...stolenPlacement },
+      wasClue: puzzle.clues.some((clue) => clue.pieceId === stolenPlacement.pieceId),
+    },
+    replacement,
+    pieces: nextPieces,
+    clues: nextClues,
+    solution: solved.solution,
+    model,
+  };
 }
 
 export function planNovelMutation({
@@ -251,7 +284,6 @@ export function planNovelMutation({
   serial,
   attackIndex = 0,
   seed = 0,
-  preservePlaced = true,
 }) {
   const clues = puzzle.clues;
   let best = null;
@@ -261,13 +293,8 @@ export function planNovelMutation({
   for (const stolenPlacement of candidateOrder(placements, clues, attackIndex, seed)) {
     const stolenPiece = puzzle.model.getPiece(stolenPlacement.pieceId);
     if (!stolenPiece) continue;
-    const retained = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
+    const fixed = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
     const nextClues = clues.filter((clue) => clue.pieceId !== stolenPlacement.pieceId);
-    const groups = repositionGroups(retained, nextClues, preservePlaced, `${seed}-${stolenPlacement.pieceId}`);
-
-    for (const releasedIds of groups) {
-    const released = new Set(releasedIds);
-    const fixed = retained.filter((placement) => !released.has(placement.pieceId));
     const fixedIds = new Set(fixed.map((placement) => placement.pieceId));
     const remainingPieces = puzzle.pieces.filter((piece) => (
       piece.id !== stolenPlacement.pieceId && !fixedIds.has(piece.id)
@@ -311,57 +338,31 @@ export function planNovelMutation({
         const shapeKey = canonicalShapeKey(shape);
         if (shapeKey === stolenShapeKey || activeShapeKeys.has(shapeKey)) return;
 
-        const replacement = {
-          id: `boss-${bossId}-mutation-${serial}`,
-          name: `Cień ${serial}`,
-          color: ["#15152d", "#7a1432", "#cb1b45", "#4b164c"][serial % 4],
-          role: "boss-custom",
-          bossPiece: true,
-          cells: shape,
-        };
-        const nextPieces = [
-          ...puzzle.pieces.filter((piece) => piece.id !== stolenPlacement.pieceId),
-          replacement,
-        ];
-        const model = createPuzzleModel({
-          pieces: nextPieces,
-          rows: puzzle.rows,
-          cols: puzzle.cols,
-          mask: puzzle.mask,
-        });
+        const replacement = createMutationPiece(bossId, serial, shape);
         const replacementPlacement = {
           pieceId: replacement.id,
           variant: 0,
           row: minRow,
           col: minCol,
         };
-        const solution = [...fixed, ...chosen.map((placement) => ({ ...placement })), replacementPlacement];
-        if (!model.validateCompletedBoard(solution, nextClues)) return;
-
-        const movedExisting = chosen.some((placement) => {
-          const oldPlacement = puzzle.solution.find((candidate) => candidate.pieceId === placement.pieceId);
-          return oldPlacement && !sameCells(puzzle.model, placement, oldPlacement);
+        const proposedSolution = [...fixed, ...chosen.map((placement) => ({ ...placement })), replacementPlacement];
+        const plan = validateMutationPlan({
+          puzzle,
+          stolenPlacement,
+          stolenPiece,
+          replacement,
+          fixed,
+          nextClues,
+          seed: hashSeed(`${seed}-${stolenPlacement.pieceId}-${shapeKey}`),
+          proposedSolution,
         });
-        const replacementMoved = !sameCells(puzzle.model, replacementPlacement, stolenPlacement);
+        if (!plan) return;
+
         const score = (isConnectedShape(shape) ? 50 : 0)
           + (maxRow < 5 && maxCol < 5 ? 20 : 0)
-          + (replacementMoved ? 12 : 0)
-          + (movedExisting ? 6 : 0)
           - (maxRow + 1) * (maxCol + 1) * 0.1;
         if (!best || score > best.score) {
-          best = {
-            score,
-            stolen: {
-              piece: { ...stolenPiece, cells: stolenPiece.cells.map((cell) => [...cell]) },
-              placement: { ...stolenPlacement },
-              wasClue: clues.some((clue) => clue.pieceId === stolenPlacement.pieceId),
-            },
-            replacement,
-            pieces: nextPieces,
-            clues: nextClues,
-            solution,
-            model,
-          };
+          best = { score, ...plan };
         }
         return;
       }
@@ -390,11 +391,34 @@ export function planNovelMutation({
 
     search();
     if (best?.score >= 50) break;
-    }
-    if (best?.score >= 50) break;
   }
 
-  if (!best) return null;
-  const { score: _score, ...plan } = best;
-  return plan;
+  if (best) {
+    const { score: _score, ...plan } = best;
+    return plan;
+  }
+
+  // Bei einem vollständig belegten Brett kann ein anderer Fußabdruck die
+  // neun verbliebenen Steine unmöglich unverändert lassen. In diesem Fall ist
+  // der sichere Ersatz ein neuer Boss-Stein mit dem Fußabdruck des Diebstahls.
+  // Er besitzt eine neue Identität, der gestohlene Stein bleibt aber entfernt.
+  for (const stolenPlacement of candidateOrder(placements, clues, attackIndex, `${seed}-fallback`)) {
+    const stolenPiece = puzzle.model.getPiece(stolenPlacement.pieceId);
+    if (!stolenPiece) continue;
+    const fixed = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
+    const nextClues = clues.filter((clue) => clue.pieceId !== stolenPlacement.pieceId);
+    const replacement = createMutationPiece(bossId, serial, stolenPiece.cells);
+    const plan = validateMutationPlan({
+      puzzle,
+      stolenPlacement,
+      stolenPiece,
+      replacement,
+      fixed,
+      nextClues,
+      seed: hashSeed(`${seed}-fallback-${stolenPlacement.pieceId}`),
+    });
+    if (plan) return plan;
+  }
+
+  return null;
 }

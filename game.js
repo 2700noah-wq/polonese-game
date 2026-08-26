@@ -22,7 +22,7 @@ import {
   isSecretModeUnlocked,
   planNovelMutation,
   secretModeLockMessage,
-} from "./secret-levels.js?v=20260826-boss-phases-1";
+} from "./secret-levels.js?v=20260826-boss-solver-2";
 import {
   ABSOLUTE_HITS_TO_WIN,
   NORMAL_BOSS_THEFTS,
@@ -334,11 +334,6 @@ function buildBossMutationPlan(placements) {
     serial: state.boss.attackCount + 1,
     attackIndex: state.boss.attackCount,
     seed: `${state.puzzle.seed}-${state.boss.attackCount}-${placements.map((placement) => placement.pieceId).join("-")}`,
-    // Ab dem zweiten normalen Angriff darf der Solver höchstens zwei weitere
-    // Steine in seiner Zielbelegung neu anordnen. So bleibt ein echter
-    // Formtausch auch bei 1 oder 0 Reststeinen schnell und sicher berechenbar.
-    // Sichtbar verschwindet trotzdem nur der gestohlene Stein.
-    preservePlaced: isAbsoluteBoss(state.boss) || state.boss.attackCount === 0,
   });
 }
 

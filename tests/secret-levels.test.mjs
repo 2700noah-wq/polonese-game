@@ -30,7 +30,7 @@ function extendAlongSolution(puzzle, current, targetCount) {
   return [...byId.values()];
 }
 
-function planAttack(puzzle, placements, attackIndex, preservePlaced = true) {
+function planAttack(puzzle, placements, attackIndex) {
   return planNovelMutation({
     puzzle,
     placements,
@@ -38,8 +38,14 @@ function planAttack(puzzle, placements, attackIndex, preservePlaced = true) {
     serial: attackIndex + 1,
     attackIndex,
     seed: `${puzzle.bossId}-${attackIndex}`,
-    preservePlaced,
   });
+}
+
+function samePlacement(left, right) {
+  return left.pieceId === right.pieceId
+    && left.variant === right.variant
+    && left.row === right.row
+    && left.col === right.col;
 }
 
 function applyPlan(puzzle, plan) {
@@ -85,32 +91,51 @@ test("die vier normalen Bossstarts besitzen exakt 4, 3, 2 und 1 Vorlage", () => 
 });
 
 for (const bossId of ["easy", "medium", "hard", "expert"]) {
-  test(`${bossId}: Angriffe bei 2, 1 und 0 Reststeinen bleiben auf dem 5×10-Feld lösbar`, () => {
+  test(`${bossId}: der sichtbare Ablauf ist nach allen drei Angriffen vollständig lösbar`, () => {
     let puzzle = createBossPuzzle(bossId);
     let placements = [];
     const triggerCounts = [8, 9, 10];
+    const stolenIds = new Set();
 
     for (let attackIndex = 0; attackIndex < 3; attackIndex += 1) {
       placements = extendAlongSolution(puzzle, placements, triggerCounts[attackIndex]);
       assert.equal(placements.length, triggerCounts[attackIndex]);
-      const plan = planAttack(puzzle, placements, attackIndex, attackIndex === 0);
+      const plan = planAttack(puzzle, placements, attackIndex);
       assert.ok(plan, `Angriff ${attackIndex + 1} muss vorbereitbar sein`);
       const beforeIds = new Set(puzzle.pieces.map((piece) => piece.id));
-      const beforeShape = puzzle.model.getPiece(plan.stolen.piece.id).cells;
       assert.equal(beforeIds.has(plan.replacement.id), false);
-      assert.notDeepEqual(plan.replacement.cells, beforeShape);
+      assert.equal(plan.replacement.bossPiece, true);
+      assert.equal(plan.replacement.cells.length, 5);
       assert.equal(plan.model.validateCompletedBoard(plan.solution, plan.clues), true);
 
-      placements = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
+      const retained = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
+      for (const placement of retained) {
+        assert.equal(
+          plan.solution.some((candidate) => samePlacement(candidate, placement)),
+          true,
+          `${placement.pieceId} darf durch Angriff ${attackIndex + 1} nicht unsichtbar verschoben werden`,
+        );
+      }
+
+      stolenIds.add(plan.stolen.piece.id);
+      placements = retained;
       puzzle = applyPlan(puzzle, plan);
       assert.equal(puzzle.rows, 5);
       assert.equal(puzzle.cols, 10);
       assert.equal(puzzle.model.activeCells.size, 50);
       assert.equal(puzzle.pieces.length, 10);
+      for (const stolenId of stolenIds) {
+        assert.equal(puzzle.pieces.some((piece) => piece.id === stolenId), false);
+        assert.equal(puzzle.solution.some((placement) => placement.pieceId === stolenId), false);
+      }
     }
 
     assert.equal(placements.length, 9);
+    placements = extendAlongSolution(puzzle, placements, 10);
+    assert.equal(placements.length, 10);
+    assert.equal(puzzle.model.validateCompletedBoard(placements, puzzle.clues), true);
     assert.equal(puzzle.model.validateCompletedBoard(puzzle.solution, puzzle.clues), true);
+    assert.equal(puzzle.pieces.filter((piece) => !placements.some((placement) => placement.pieceId === piece.id)).length, 0);
   });
 }
 
@@ -122,7 +147,11 @@ test("Absolut bleibt auch nach mehreren verpassten, validierten Angriffen kontro
     const plan = planAttack(puzzle, placements, attackIndex);
     assert.ok(plan);
     assert.equal(plan.model.validateCompletedBoard(plan.solution, plan.clues), true);
-    placements = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
+    const retained = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
+    for (const placement of retained) {
+      assert.equal(plan.solution.some((candidate) => samePlacement(candidate, placement)), true);
+    }
+    placements = retained;
     puzzle = applyPlan(puzzle, plan);
   }
 });
