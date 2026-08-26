@@ -22,9 +22,7 @@ export function sanitizeSecretProgress(value) {
 export function createFreshStats(difficultyIds) {
   return {
     completed: Object.fromEntries(difficultyIds.map((difficulty) => [difficulty, []])),
-    bestTimes: {},
     totalSolved: 0,
-    totalPlaySeconds: 0,
     currentLevel: Object.fromEntries(difficultyIds.map((difficulty) => [difficulty, 0])),
     secret: freshSecretProgress(),
   };
@@ -50,14 +48,10 @@ export function sanitizeStats(stored, {
       : 0;
   }
 
-  fallback.bestTimes = stored.bestTimes && typeof stored.bestTimes === "object"
-    ? { ...stored.bestTimes }
-    : {};
   fallback.totalSolved = Math.max(0, Number(stored.totalSolved) || 0);
-  fallback.totalPlaySeconds = Math.max(0, Number(stored.totalPlaySeconds) || 0);
   fallback.secret = sanitizeSecretProgress(stored.secret);
 
-  // Frühere Endless-Felder werden absichtlich nicht übernommen. Der normale
-  // Level-Fortschritt und alle Bestzeiten bleiben davon unberührt.
+  // Frühere Endless- und Timer-Felder werden absichtlich nicht übernommen.
+  // Levelauswahl, normaler Fortschritt und Bossfortschritt bleiben erhalten.
   return fallback;
 }

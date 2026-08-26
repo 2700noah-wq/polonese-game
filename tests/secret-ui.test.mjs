@@ -5,6 +5,8 @@ import test from "node:test";
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 const game = readFileSync(new URL("../game.js", import.meta.url), "utf8");
+const bossEngine = readFileSync(new URL("../boss-engine.js", import.meta.url), "utf8");
+const secretLevels = readFileSync(new URL("../secret-levels.js", import.meta.url), "utf8");
 
 test("Endless ist vollständig aus Oberfläche und Spielsteuerung entfernt", () => {
   assert.doesNotMatch(html, /Endlos|data-mode="endless"/i);
@@ -65,4 +67,15 @@ test("nur geometrische Regeln und Vorlagen bleiben beim Platzieren verbindlich",
   assert.match(game, /Das Teil ragt über den Rand hinaus/);
   assert.match(game, /Dort liegt bereits ein anderes Teil/);
   assert.match(game, /Dieses Vorlagen-Teil muss exakt an die gezeigte Position/);
+});
+
+test("Timeranzeige und aktive Spielzeitmessung sind vollständig entfernt", () => {
+  assert.doesNotMatch(html, /resultTime|resultBest|statsPlayTime|Bestzeit|Gesamte Spielzeit/);
+  assert.doesNotMatch(game, /startedAt|elapsedSeconds|updateTimer|bestTimeKey|bestTimes|totalPlaySeconds|setInterval/);
+});
+
+test("Bosskämpfe besitzen keinen vergrößerten Brett- oder False-Ending-Pfad mehr", () => {
+  for (const source of [html, css, game, bossEngine, secretLevels]) {
+    assert.doesNotMatch(source, /finalBoard|createFinalBoardPlan|beginFinalBoard|shouldStartFalseEnding|board-pull|secret-final|65\s*Felder|13\s*Steine/);
+  }
 });

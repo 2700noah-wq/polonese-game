@@ -127,40 +127,7 @@ export function createBossPuzzle(bossId) {
     clues,
     solution: generated.solution.map((placement) => ({ ...placement })),
     model,
-    finalBoard: false,
   };
-}
-
-export function createStaticBossPiece(bossId, kind) {
-  if (kind === "i") {
-    return {
-      id: `boss-${bossId}-i`,
-      name: "Berło",
-      color: "#111827",
-      role: "boss-i",
-      bossPiece: true,
-      cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
-    };
-  }
-  if (kind === "x") {
-    return {
-      id: `boss-${bossId}-x`,
-      name: "Korona",
-      color: "#f2b705",
-      role: "boss-x",
-      bossPiece: true,
-      cells: [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]],
-    };
-  }
-  throw new Error(`Unbekannter Bossstein: ${kind}`);
-}
-
-function mergeRequiredClues(placements, clues) {
-  const byId = new Map(placements.map((placement) => [placement.pieceId, placement]));
-  for (const clue of clues) {
-    if (!byId.has(clue.pieceId)) byId.set(clue.pieceId, clue);
-  }
-  return [...byId.values()];
 }
 
 function candidateOrder(placements, clues, attackIndex, seed) {
@@ -172,48 +139,6 @@ function candidateOrder(placements, clues, attackIndex, seed) {
     if (leftClue !== rightClue) return leftClue === preferClue ? -1 : 1;
     return hashSeed(`${seed}-${left.pieceId}`) - hashSeed(`${seed}-${right.pieceId}`);
   });
-}
-
-export function planStaticMutation({
-  puzzle,
-  placements,
-  replacementPiece,
-  attackIndex = 0,
-  seed = 0,
-}) {
-  const clues = puzzle.clues;
-  for (const stolenPlacement of candidateOrder(placements, clues, attackIndex, seed)) {
-    const stolenPiece = puzzle.model.getPiece(stolenPlacement.pieceId);
-    if (!stolenPiece || canonicalShapeKey(stolenPiece.cells) === canonicalShapeKey(replacementPiece.cells)) continue;
-    const remainingPlacements = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
-    const nextClues = clues.filter((clue) => clue.pieceId !== stolenPlacement.pieceId);
-    const nextPieces = [
-      ...puzzle.pieces.filter((piece) => piece.id !== stolenPlacement.pieceId),
-      replacementPiece,
-    ];
-    const model = createPuzzleModel({
-      pieces: nextPieces,
-      rows: puzzle.rows,
-      cols: puzzle.cols,
-      mask: puzzle.mask,
-    });
-    const locked = mergeRequiredClues(remainingPlacements, nextClues);
-    const solved = model.solve(locked, { limit: 1, seed: hashSeed(`${seed}-${stolenPlacement.pieceId}`) });
-    if (!solved.solution || !model.validateCompletedBoard(solved.solution, nextClues)) continue;
-    return {
-      stolen: {
-        piece: { ...stolenPiece, cells: stolenPiece.cells.map((cell) => [...cell]) },
-        placement: { ...stolenPlacement },
-        wasClue: clues.some((clue) => clue.pieceId === stolenPlacement.pieceId),
-      },
-      replacement: replacementPiece,
-      pieces: nextPieces,
-      clues: nextClues,
-      solution: solved.solution,
-      model,
-    };
-  }
-  return null;
 }
 
 function occupiedCells(model, placements) {
@@ -230,6 +155,21 @@ function sameCells(model, left, right) {
   return leftKey === rightKey;
 }
 
+function repositionGroups(retained, clues, preservePlaced, seed) {
+  if (preservePlaced) return [[]];
+  const clueIds = new Set(clues.map((clue) => clue.pieceId));
+  const movable = retained
+    .filter((placement) => !clueIds.has(placement.pieceId))
+    .sort((left, right) => hashSeed(`${seed}-${left.pieceId}`) - hashSeed(`${seed}-${right.pieceId}`));
+  const groups = movable.map((placement) => [placement.pieceId]);
+  for (let left = 0; left < movable.length; left += 1) {
+    for (let right = left + 1; right < movable.length; right += 1) {
+      groups.push([movable[left].pieceId, movable[right].pieceId]);
+    }
+  }
+  return groups;
+}
+
 export function planNovelMutation({
   puzzle,
   placements,
@@ -237,18 +177,24 @@ export function planNovelMutation({
   serial,
   attackIndex = 0,
   seed = 0,
+  preservePlaced = true,
 }) {
   const clues = puzzle.clues;
   let best = null;
   let explored = 0;
-  const maxExplored = 18000;
+  const maxExplored = 4000;
 
   for (const stolenPlacement of candidateOrder(placements, clues, attackIndex, seed)) {
     const stolenPiece = puzzle.model.getPiece(stolenPlacement.pieceId);
     if (!stolenPiece) continue;
-    const fixed = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
-    const fixedIds = new Set(fixed.map((placement) => placement.pieceId));
+    const retained = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
     const nextClues = clues.filter((clue) => clue.pieceId !== stolenPlacement.pieceId);
+    const groups = repositionGroups(retained, nextClues, preservePlaced, `${seed}-${stolenPlacement.pieceId}`);
+
+    for (const releasedIds of groups) {
+    const released = new Set(releasedIds);
+    const fixed = retained.filter((placement) => !released.has(placement.pieceId));
+    const fixedIds = new Set(fixed.map((placement) => placement.pieceId));
     const remainingPieces = puzzle.pieces.filter((piece) => (
       piece.id !== stolenPlacement.pieceId && !fixedIds.has(piece.id)
     ));
@@ -363,81 +309,18 @@ export function planNovelMutation({
         search();
         chosen.pop();
         cells.forEach((cell) => occupied.delete(cell));
-        if (best?.score >= 87 || explored >= maxExplored) break;
+        if (best?.score >= 50 || explored >= maxExplored) break;
       }
       used.delete(nextPiece.id);
     }
 
     search();
-    if (best?.score >= 87) break;
+    if (best?.score >= 50) break;
+    }
+    if (best?.score >= 50) break;
   }
 
   if (!best) return null;
   const { score: _score, ...plan } = best;
   return plan;
-}
-
-export function createFinalBoardPlan({ puzzle, stolen }) {
-  const allPiecesById = new Map(puzzle.pieces.map((piece) => [piece.id, piece]));
-  stolen.forEach((entry) => allPiecesById.set(entry.piece.id, entry.piece));
-  const allPieces = [...allPiecesById.values()];
-  if (allPieces.length !== 13 || stolen.length !== 3) {
-    throw new Error("Die finale Bosskonfiguration enthält nicht die erwarteten 13 Steine.");
-  }
-
-  const stolenPieces = stolen.map((entry) => entry.piece);
-  const packingModel = createPuzzleModel({ pieces: stolenPieces, rows: 5, cols: 10 });
-  const occupied = new Set();
-  const packed = [];
-
-  function pack(index) {
-    if (index === stolenPieces.length) return true;
-    const piece = stolenPieces[index];
-    const options = packingModel.placementsFor(piece.id).filter((placement) => (
-      placement.cells.some((cell) => cell < 10)
-      && placement.cells.every((cell) => !occupied.has(cell))
-    ));
-    for (const placement of options) {
-      placement.cells.forEach((cell) => occupied.add(cell));
-      packed.push(placement);
-      if (pack(index + 1)) return true;
-      packed.pop();
-      placement.cells.forEach((cell) => occupied.delete(cell));
-    }
-    return false;
-  }
-
-  if (!pack(0)) throw new Error("Die zurückgegebenen Steine konnten nicht für die Schlussphase angeordnet werden.");
-
-  const rows = 10;
-  const cols = 10;
-  const mask = [];
-  for (let row = 0; row < 5; row += 1) {
-    for (let col = 0; col < 10; col += 1) mask.push([row, col]);
-  }
-  const returnedPlacements = packed.map((placement) => {
-    const shifted = { ...placement, row: placement.row + 5 };
-    packingModel.placementCells(placement).forEach((cell) => {
-      mask.push([Math.floor(cell / 10) + 5, cell % 10]);
-    });
-    return shifted;
-  });
-
-  const model = createPuzzleModel({ pieces: allPieces, rows, cols, mask });
-  const solution = [...puzzle.solution, ...returnedPlacements];
-  if (!model.validateCompletedBoard(solution, [])) {
-    throw new Error("Die vergrößerte Schlussphase ist nicht vollständig lösbar.");
-  }
-
-  return {
-    ...puzzle,
-    rows,
-    cols,
-    mask,
-    pieces: allPieces,
-    clues: [],
-    solution,
-    model,
-    finalBoard: true,
-  };
 }

@@ -8,7 +8,7 @@ const options = {
   levelsPerDifficulty: 60,
 };
 
-test("bestehende normale Spielstände bleiben bei der Secret-Migration erhalten", () => {
+test("bestehender Fortschritt bleibt erhalten, alte Endless- und Timerdaten werden ignoriert", () => {
   const migrated = sanitizeStats({
     completed: { easy: [0, 1, 59], medium: [4], hard: [], expert: [] },
     currentLevel: { easy: 30, medium: 4, hard: 0, expert: 0 },
@@ -21,8 +21,9 @@ test("bestehende normale Spielstände bleiben bei der Secret-Migration erhalten"
 
   assert.deepEqual(migrated.completed.easy, [0, 1, 59]);
   assert.equal(migrated.currentLevel.easy, 30);
-  assert.equal(migrated.bestTimes["fixed:easy:0"], 18);
   assert.equal(migrated.totalSolved, 7);
+  assert.equal("bestTimes" in migrated, false);
+  assert.equal("totalPlaySeconds" in migrated, false);
   assert.equal("endlessSolved" in migrated, false);
   assert.equal("endlessRound" in migrated, false);
   assert.deepEqual(migrated.secret.completed, {

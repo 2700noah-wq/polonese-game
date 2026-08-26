@@ -6,10 +6,9 @@ Polonese ist ein eigenständiges, browserbasiertes Logikspiel: Eine Vorlage gibt
 
 - 240 deterministische Levels: je 60 in Leicht, Mittel, Schwer und Polonesisch
 - freischaltbare Secret Level mit fünf Bossstufen
-- validierte Puzzleveränderungen, drei Diebstähle und eine vergrößerte Schlussphase
+- validierte Puzzleveränderungen mit drei phasenabhängigen Bossangriffen
 - interaktiver Endboss Absolut mit wechselnden Portalen und drei dauerhaften Treffern
 - durchgehend polnischer Rot-Weiß-Stil
-- Timer und lokale Bestzeiten
 - eigener, dauerhaft lokal gespeicherter Spielstand pro Browser/Gerät
 - Fortschritt und Statistiken im Browser
 - responsive Bedienung für Desktop, Tablet und Smartphone

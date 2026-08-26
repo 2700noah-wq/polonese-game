@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { PIECES } from "../logic.js";
 import {
   BOSS_CONFIG,
   BOSS_ORDER,
@@ -9,7 +8,6 @@ import {
   bossLockMessage,
   createBossPuzzle,
   createBossSelectionItems,
-  createFinalBoardPlan,
   isBossUnlocked,
   isSecretModeUnlocked,
   planNovelMutation,
@@ -23,36 +21,25 @@ function completedDifficulties(...ids) {
   ]));
 }
 
-function combinations(values, count, start = 0, current = [], result = []) {
-  if (current.length === count) {
-    result.push([...current]);
-    return result;
+function extendAlongSolution(puzzle, current, targetCount) {
+  const byId = new Map(current.map((placement) => [placement.pieceId, { ...placement }]));
+  for (const placement of [...puzzle.clues, ...puzzle.solution]) {
+    if (byId.size >= targetCount) break;
+    if (!byId.has(placement.pieceId)) byId.set(placement.pieceId, { ...placement });
   }
-  for (let index = start; index <= values.length - (count - current.length); index += 1) {
-    current.push(values[index]);
-    combinations(values, count, index + 1, current, result);
-    current.pop();
-  }
-  return result;
+  return [...byId.values()];
 }
 
-function findValidatedAttack(puzzle, attackIndex) {
-  for (let solutionSeed = 0; solutionSeed < 16; solutionSeed += 1) {
-    const solution = puzzle.model.solve(puzzle.clues, { limit: 1, seed: solutionSeed }).solution ?? puzzle.solution;
-    for (const placements of combinations(solution, 8)) {
-      if (!puzzle.clues.every((clue) => placements.some((placement) => placement.pieceId === clue.pieceId))) continue;
-      const plan = planNovelMutation({
-        puzzle,
-        placements,
-        bossId: puzzle.bossId,
-        serial: attackIndex + 1,
-        attackIndex,
-        seed: `${puzzle.bossId}-${attackIndex}-${solutionSeed}`,
-      });
-      if (plan) return { placements, plan };
-    }
-  }
-  return null;
+function planAttack(puzzle, placements, attackIndex, preservePlaced = true) {
+  return planNovelMutation({
+    puzzle,
+    placements,
+    bossId: puzzle.bossId,
+    serial: attackIndex + 1,
+    attackIndex,
+    seed: `${puzzle.bossId}-${attackIndex}`,
+    preservePlaced,
+  });
 }
 
 function applyPlan(puzzle, plan) {
@@ -98,33 +85,44 @@ test("die vier normalen Bossstarts besitzen exakt 4, 3, 2 und 1 Vorlage", () => 
 });
 
 for (const bossId of ["easy", "medium", "hard", "expert"]) {
-  test(`${bossId}: drei validierte Mutationen und das 65-Felder-Finale bleiben lösbar`, () => {
+  test(`${bossId}: Angriffe bei 2, 1 und 0 Reststeinen bleiben auf dem 5×10-Feld lösbar`, () => {
     let puzzle = createBossPuzzle(bossId);
-    const stolen = [];
+    let placements = [];
+    const triggerCounts = [8, 9, 10];
+
     for (let attackIndex = 0; attackIndex < 3; attackIndex += 1) {
-      const attack = findValidatedAttack(puzzle, attackIndex);
-      assert.ok(attack, `Angriff ${attackIndex + 1} muss vorbereitbar sein`);
+      placements = extendAlongSolution(puzzle, placements, triggerCounts[attackIndex]);
+      assert.equal(placements.length, triggerCounts[attackIndex]);
+      const plan = planAttack(puzzle, placements, attackIndex, attackIndex === 0);
+      assert.ok(plan, `Angriff ${attackIndex + 1} muss vorbereitbar sein`);
       const beforeIds = new Set(puzzle.pieces.map((piece) => piece.id));
-      const beforeShape = puzzle.model.getPiece(attack.plan.stolen.piece.id).cells;
-      assert.equal(beforeIds.has(attack.plan.replacement.id), false);
-      assert.notDeepEqual(attack.plan.replacement.cells, beforeShape);
-      assert.equal(attack.plan.model.validateCompletedBoard(attack.plan.solution, attack.plan.clues), true);
-      stolen.push(attack.plan.stolen);
-      puzzle = applyPlan(puzzle, attack.plan);
+      const beforeShape = puzzle.model.getPiece(plan.stolen.piece.id).cells;
+      assert.equal(beforeIds.has(plan.replacement.id), false);
+      assert.notDeepEqual(plan.replacement.cells, beforeShape);
+      assert.equal(plan.model.validateCompletedBoard(plan.solution, plan.clues), true);
+
+      placements = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
+      puzzle = applyPlan(puzzle, plan);
+      assert.equal(puzzle.rows, 5);
+      assert.equal(puzzle.cols, 10);
+      assert.equal(puzzle.model.activeCells.size, 50);
+      assert.equal(puzzle.pieces.length, 10);
     }
-    const finalPuzzle = createFinalBoardPlan({ puzzle, stolen });
-    assert.equal(finalPuzzle.pieces.length, PIECES.length + 3);
-    assert.equal(finalPuzzle.model.activeCells.size, 65);
-    assert.equal(finalPuzzle.model.validateCompletedBoard(finalPuzzle.solution, []), true);
+
+    assert.equal(placements.length, 9);
+    assert.equal(puzzle.model.validateCompletedBoard(puzzle.solution, puzzle.clues), true);
   });
 }
 
 test("Absolut bleibt auch nach mehreren verpassten, validierten Angriffen kontrolliert lösbar", () => {
   let puzzle = createBossPuzzle("absolute");
+  let placements = [];
   for (let attackIndex = 0; attackIndex < 6; attackIndex += 1) {
-    const attack = findValidatedAttack(puzzle, attackIndex);
-    assert.ok(attack);
-    assert.equal(attack.plan.model.validateCompletedBoard(attack.plan.solution, attack.plan.clues), true);
-    puzzle = applyPlan(puzzle, attack.plan);
+    placements = extendAlongSolution(puzzle, placements, 8);
+    const plan = planAttack(puzzle, placements, attackIndex);
+    assert.ok(plan);
+    assert.equal(plan.model.validateCompletedBoard(plan.solution, plan.clues), true);
+    placements = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
+    puzzle = applyPlan(puzzle, plan);
   }
 });

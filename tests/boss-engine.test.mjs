@@ -3,27 +3,44 @@ import test from "node:test";
 
 import {
   ABSOLUTE_HITS_TO_WIN,
+  NORMAL_BOSS_REMAINING_TRIGGERS,
   NORMAL_BOSS_THEFTS,
-  beginFinalBoard,
   canFinishBoss,
   createBossState,
   recordAbsoluteHit,
   recordAbsoluteMiss,
   recordTheft,
   shouldStartAbsoluteAttack,
-  shouldStartFalseEnding,
   shouldStartNormalAttack,
 } from "../boss-engine.js";
 
-test("normale Bosse greifen exakt dreimal bei zwei übrigen Steinen an", () => {
+test("normale Bosse greifen phasenabhängig bei 2, 1 und 0 übrigen Steinen an", () => {
   const boss = createBossState("easy");
+  assert.deepEqual(NORMAL_BOSS_REMAINING_TRIGGERS, [2, 1, 0]);
+
   assert.equal(shouldStartNormalAttack(boss, 8, 10), true);
   assert.equal(shouldStartNormalAttack(boss, 7, 10), false);
-  for (let index = 0; index < NORMAL_BOSS_THEFTS; index += 1) recordTheft(boss, { piece: { id: `p${index}` } });
+  assert.equal(shouldStartNormalAttack(boss, 9, 10), false);
+  recordTheft(boss, { piece: { id: "p0" } });
+
+  assert.equal(boss.attackCount, 1);
   assert.equal(shouldStartNormalAttack(boss, 8, 10), false);
-  assert.equal(shouldStartFalseEnding(boss, true), true);
+  assert.equal(shouldStartNormalAttack(boss, 9, 10), true);
+  assert.equal(shouldStartNormalAttack(boss, 10, 10), false);
+  recordTheft(boss, { piece: { id: "p1" } });
+
+  assert.equal(boss.attackCount, 2);
+  assert.equal(shouldStartNormalAttack(boss, 9, 10), false);
+  assert.equal(shouldStartNormalAttack(boss, 10, 10), true);
+  recordTheft(boss, { piece: { id: "p2" } });
+
+  assert.equal(boss.attackCount, NORMAL_BOSS_THEFTS);
+  assert.equal(boss.thefts.length, NORMAL_BOSS_THEFTS);
+  assert.equal(shouldStartNormalAttack(boss, 10, 10), false);
+  assert.equal(canFinishBoss(boss, false), false);
+  boss.thefts.push({ piece: { id: "unerwartet" } });
   assert.equal(canFinishBoss(boss, true), false);
-  beginFinalBoard(boss);
+  boss.thefts.pop();
   assert.equal(canFinishBoss(boss, true), true);
 });
 

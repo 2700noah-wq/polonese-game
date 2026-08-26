@@ -11,24 +11,22 @@ import {
 import { createLevelPickerItems } from "./level-picker.js?v=20260820-1";
 import { pointerAnchorForPlacement, placementFromBoardPoint } from "./placement-math.js?v=20260821-1";
 import { createPuzzleModel } from "./puzzle-model.js?v=20260824-secret-1";
-import { sanitizeStats } from "./game-storage.js?v=20260824-secret-1";
+import { sanitizeStats } from "./game-storage.js?v=20260826-boss-phases-1";
 import {
   BOSS_CONFIG,
   SECRET_NOTICE_MS,
   bossLockMessage,
   createBossPuzzle,
   createBossSelectionItems,
-  createFinalBoardPlan,
   isBossUnlocked,
   isSecretModeUnlocked,
   planNovelMutation,
   secretModeLockMessage,
-} from "./secret-levels.js?v=20260824-secret-1";
+} from "./secret-levels.js?v=20260826-boss-phases-1";
 import {
   ABSOLUTE_HITS_TO_WIN,
   NORMAL_BOSS_THEFTS,
   absoluteReactionWindow,
-  beginFinalBoard,
   canFinishBoss,
   createBossState,
   isAbsoluteBoss,
@@ -36,9 +34,8 @@ import {
   recordAbsoluteMiss,
   recordTheft,
   shouldStartAbsoluteAttack,
-  shouldStartFalseEnding,
   shouldStartNormalAttack,
-} from "./boss-engine.js?v=20260824-secret-1";
+} from "./boss-engine.js?v=20260826-boss-phases-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -74,7 +71,6 @@ const elements = {
   templateCard: document.querySelector("#templateCard"),
   templateBoard: document.querySelector("#templateBoard"),
   boardCard: document.querySelector("#boardCard"),
-  boardWrap: document.querySelector(".board-wrap"),
   gameBoard: document.querySelector("#gameBoard"),
   placedCounter: document.querySelector("#placedCounter"),
   boardMessage: document.querySelector("#boardMessage"),
@@ -108,12 +104,9 @@ const elements = {
   secretBossGrid: document.querySelector("#secretBossGrid"),
   statsDialog: document.querySelector("#statsDialog"),
   howDialog: document.querySelector("#howDialog"),
-  resultTime: document.querySelector("#resultTime"),
-  resultBest: document.querySelector("#resultBest"),
   continueButton: document.querySelector("#continueButton"),
   statsSolved: document.querySelector("#statsSolved"),
   statsSecret: document.querySelector("#statsSecret"),
-  statsPlayTime: document.querySelector("#statsPlayTime"),
   statsPercent: document.querySelector("#statsPercent"),
   difficultyStats: document.querySelector("#difficultyStats"),
 };
@@ -152,8 +145,6 @@ const state = {
   history: [],
   preview: null,
   pickedUpPieceId: null,
-  startedAt: performance.now(),
-  elapsedSeconds: 0,
   solved: false,
   inputLocked: false,
   pendingUnlockNotice: false,
@@ -165,7 +156,7 @@ let dragSession = null;
 let dragGhost = null;
 let suppressClickUntil = 0;
 let bossHitResolver = null;
-let bossHitTimer = null;
+let bossHitTimeoutId = null;
 
 function saveStats() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
@@ -194,21 +185,6 @@ function pushHistory() {
 
 function invalidatePendingMutation() {
   if (state.boss) state.boss.pendingMutation = null;
-}
-
-function formatTime(totalSeconds) {
-  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(safeSeconds / 3600);
-  const minutes = Math.floor((safeSeconds % 3600) / 60);
-  const seconds = safeSeconds % 60;
-  const clock = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  return hours ? `${String(hours).padStart(2, "0")}:${clock}` : clock;
-}
-
-function bestTimeKey() {
-  return state.mode === "fixed"
-    ? `fixed:${state.difficulty}:${state.levelIndex}`
-    : `secret:${state.bossId}`;
 }
 
 function currentPieces() {
@@ -268,8 +244,6 @@ function resetInteractionState() {
   state.history = [];
   state.preview = null;
   state.pickedUpPieceId = null;
-  state.elapsedSeconds = 0;
-  state.startedAt = performance.now();
   state.inputLocked = false;
   dragSession = null;
   dragGhost?.remove();
@@ -289,7 +263,6 @@ function createFixedPuzzle() {
     mask: null,
     pieces,
     model,
-    finalBoard: false,
   };
 }
 
@@ -353,7 +326,7 @@ function candidateFromCell(cellIndex) {
 }
 
 function buildBossMutationPlan(placements) {
-  if (!state.boss || state.boss.dead || state.boss.phase !== "puzzle") return null;
+  if (!state.boss || state.boss.dead) return null;
   return planNovelMutation({
     puzzle: state.puzzle,
     placements,
@@ -361,11 +334,16 @@ function buildBossMutationPlan(placements) {
     serial: state.boss.attackCount + 1,
     attackIndex: state.boss.attackCount,
     seed: `${state.puzzle.seed}-${state.boss.attackCount}-${placements.map((placement) => placement.pieceId).join("-")}`,
+    // Ab dem zweiten normalen Angriff darf der Solver höchstens zwei weitere
+    // Steine in seiner Zielbelegung neu anordnen. So bleibt ein echter
+    // Formtausch auch bei 1 oder 0 Reststeinen schnell und sicher berechenbar.
+    // Sichtbar verschwindet trotzdem nur der gestohlene Stein.
+    preservePlaced: isAbsoluteBoss(state.boss) || state.boss.attackCount === 0,
   });
 }
 
 function validateSecretFuture(placements) {
-  if (!state.boss || state.boss.phase !== "puzzle" || state.boss.dead) return { valid: true, reason: "" };
+  if (!state.boss || state.boss.dead) return { valid: true, reason: "" };
 
   const mustPrepareAttack = isAbsoluteBoss(state.boss)
     ? shouldStartAbsoluteAttack(state.boss, placements.length, currentPieces().length)
@@ -555,41 +533,23 @@ function resetBoard() {
   state.pickedUpPieceId = null;
   state.rotation = 0;
   state.flipped = false;
-  state.startedAt = performance.now();
-  state.elapsedSeconds = 0;
   invalidatePendingMutation();
-  setBoardMessage(state.puzzle.finalBoard
-    ? "Das vergrößerte Spielfeld wurde geleert. Setze alle 13 Teile neu."
-    : "Spielfeld geleert – beginne wieder mit den Vorlagen-Teilen.");
+  setBoardMessage("Spielfeld geleert – beginne wieder mit den Vorlagen-Teilen.");
   renderBoard();
   renderTray();
   renderStatus();
 }
 
-function updateTimer() {
-  if (!state.solved) state.elapsedSeconds = Math.floor((performance.now() - state.startedAt) / 1000);
-}
-
-function recordTimeAndOpenWin({ eyebrow, title, description, continueText }) {
+function recordWinAndOpen({ eyebrow, title, description, continueText }) {
   state.solved = true;
-  updateTimer();
-  const time = Math.max(1, state.elapsedSeconds);
-  const key = bestTimeKey();
-  const previousBest = Number(stats.bestTimes[key]);
-  const isBest = !previousBest || time < previousBest;
-  if (isBest) stats.bestTimes[key] = time;
-  stats.totalPlaySeconds += time;
   saveStats();
   renderStatus();
   renderStats();
   elements.winEyebrow.textContent = eyebrow;
   elements.winTitle.textContent = title;
   elements.winDescription.textContent = description;
-  elements.resultTime.textContent = formatTime(time);
-  elements.resultBest.textContent = formatTime(stats.bestTimes[key]);
   elements.continueButton.textContent = continueText;
   openDialog(elements.winDialog);
-  if (isBest) showToast("Neue Bestzeit!");
 }
 
 function syncSecretUnlockAfterNormalProgress() {
@@ -605,7 +565,7 @@ function completeFixedLevel() {
   if (!completed.includes(state.levelIndex)) completed.push(state.levelIndex);
   stats.totalSolved += 1;
   syncSecretUnlockAfterNormalProgress();
-  recordTimeAndOpenWin({
+  recordWinAndOpen({
     eyebrow: "Aufgabe geschafft",
     title: "Perfekt eingepasst!",
     description: "Jedes Feld ist belegt und alle Vorlagen stimmen.",
@@ -618,7 +578,7 @@ function completeSecretBoss() {
     stats.secret.completed[state.bossId] = true;
     stats.totalSolved += 1;
   }
-  recordTimeAndOpenWin({
+  recordWinAndOpen({
     eyebrow: "Secret Level geschafft",
     title: `${BOSS_CONFIG[state.bossId].label} besiegt!`,
     description: state.bossId === "absolute"
@@ -647,10 +607,6 @@ async function checkProgress() {
     await runNormalBossTheft();
     return;
   }
-  if (shouldStartFalseEnding(state.boss, boardComplete)) {
-    await runFalseEnding();
-    return;
-  }
   if (canFinishBoss(state.boss, boardComplete)) completeSecretBoss();
 }
 
@@ -667,8 +623,8 @@ function configureBossArena(position = "top") {
 }
 
 function hideBossArena() {
-  window.clearTimeout(bossHitTimer);
-  bossHitTimer = null;
+  window.clearTimeout(bossHitTimeoutId);
+  bossHitTimeoutId = null;
   bossHitResolver = null;
   if (!elements.bossArena) return;
   elements.bossArena.className = "boss-arena";
@@ -758,8 +714,8 @@ function waitForBossHit(milliseconds) {
     const finish = (hit) => {
       if (settled) return;
       settled = true;
-      window.clearTimeout(bossHitTimer);
-      bossHitTimer = null;
+      window.clearTimeout(bossHitTimeoutId);
+      bossHitTimeoutId = null;
       bossHitResolver = null;
       state.boss.attackWindow = false;
       elements.bossArena.classList.remove("attack-window");
@@ -767,7 +723,7 @@ function waitForBossHit(milliseconds) {
       resolve(hit);
     };
     bossHitResolver = () => finish(true);
-    bossHitTimer = window.setTimeout(() => finish(false), milliseconds);
+    bossHitTimeoutId = window.setTimeout(() => finish(false), milliseconds);
     state.boss.attackWindow = true;
     elements.bossArena.classList.add("attack-window");
     elements.bossCreature.tabIndex = 0;
@@ -839,39 +795,6 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
   setBoardMessage(`Zu spät! Absolut hat ${plan.stolen.piece.name} durch ${plan.replacement.name} ersetzt.`);
   showToast(`Angriff verpasst · ${state.boss.hits} von ${ABSOLUTE_HITS_TO_WIN} Treffern bleiben erhalten`);
   await wait(520);
-  hideBossArena();
-  setInputLocked(false);
-}
-
-async function runFalseEnding() {
-  let finalPuzzle;
-  try {
-    finalPuzzle = createFinalBoardPlan({ puzzle: state.puzzle, stolen: state.boss.thefts });
-  } catch (error) {
-    setBoardMessage(error.message, true);
-    return;
-  }
-
-  setInputLocked(true);
-  configureBossArena("top");
-  elements.bossArena.classList.add("visible", "grinning");
-  setBoardMessage("Der Boss ist noch nicht besiegt …");
-  await wait(720);
-  elements.boardWrap.classList.add("board-pull");
-  await wait(780);
-  state.puzzle = finalPuzzle;
-  state.model = finalPuzzle.model;
-  state.placed.clear();
-  state.history = [];
-  state.selectedPieceId = null;
-  state.preview = null;
-  state.pickedUpPieceId = null;
-  beginFinalBoard(state.boss);
-  renderAll();
-  elements.boardWrap.classList.remove("board-pull");
-  setBoardMessage("Der Boss hat das Feld vergrößert und alle drei gestohlenen Steine zurückgegeben. Löse alles neu!");
-  showToast("Falsches Ende: 13 Steine · 65 Felder", 4200);
-  await wait(650);
   hideBossArena();
   setInputLocked(false);
 }
@@ -1021,7 +944,6 @@ function renderStatus() {
   elements.fixedLevelControls.classList.toggle("hidden", state.mode !== "fixed");
   elements.secretStatusControls.classList.toggle("hidden", state.mode !== "secret");
   elements.gamePanel.classList.toggle("secret-active", state.mode === "secret");
-  elements.gamePanel.classList.toggle("secret-final", Boolean(state.puzzle.finalBoard));
 
   elements.difficultySelector.querySelectorAll("[data-difficulty]").forEach((button) => {
     button.classList.toggle("active", button.dataset.difficulty === state.difficulty);
@@ -1040,13 +962,11 @@ function renderStatus() {
       elements.secretBossStatus.textContent = state.boss.dead
         ? "Boss besiegt · Puzzle beenden"
         : `Treffer ${state.boss.hits} / ${ABSOLUTE_HITS_TO_WIN}`;
-    } else if (state.boss.phase === "final") {
-      elements.secretBossStatus.textContent = "Finales Brett · 13 Steine";
     } else {
-      elements.secretBossStatus.textContent = `Bossangriffe ${state.boss.thefts.length} / ${NORMAL_BOSS_THEFTS}`;
+      elements.secretBossStatus.textContent = `Bossangriffe ${state.boss.attackCount} / ${NORMAL_BOSS_THEFTS}`;
     }
     elements.challengeEyebrow.textContent = `Secret Level · ${BOSS_CONFIG[state.bossId].label}`;
-    elements.challengeTitle.textContent = state.puzzle.finalBoard ? "Das Feld wächst." : "Besiege den Boss.";
+    elements.challengeTitle.textContent = "Besiege den Boss.";
     elements.challengeDescription.textContent = isAbsoluteBoss(state.boss)
       ? "Achte auf wechselnde Portale. Der Boss selbst verrät dir, wann du eingreifen kannst."
       : "Löse das Puzzle weiter, auch wenn der Boss deine Anordnung dreimal verändert.";
@@ -1069,7 +989,6 @@ function renderStats() {
   const secretSolved = Object.values(stats.secret.completed).filter(Boolean).length;
   elements.statsSolved.textContent = String(stats.totalSolved);
   elements.statsSecret.textContent = `${secretSolved} / 5`;
-  elements.statsPlayTime.textContent = formatTime(stats.totalPlaySeconds);
   elements.statsPercent.textContent = `${Math.round((fixedSolved / (FIXED_LEVELS_PER_DIFFICULTY * DIFFICULTY_ORDER.length)) * 100)} %`;
   elements.difficultyStats.replaceChildren();
   DIFFICULTY_ORDER.forEach((difficulty) => {
@@ -1134,7 +1053,6 @@ function renderAll() {
   renderTray();
   renderStatus();
   renderStats();
-  updateTimer();
 }
 
 function openDialog(dialog) {
@@ -1481,7 +1399,6 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-window.setInterval(updateTimer, 250);
 saveStats();
 loadFixedPuzzle();
 
