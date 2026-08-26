@@ -130,6 +130,38 @@ export function createBossPuzzle(bossId) {
   };
 }
 
+export function createStaticBossPiece(bossId, kind) {
+  if (kind === "i") {
+    return {
+      id: `boss-${bossId}-i`,
+      name: "Berło",
+      color: "#111827",
+      role: "boss-i",
+      bossPiece: true,
+      cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
+    };
+  }
+  if (kind === "x") {
+    return {
+      id: `boss-${bossId}-x`,
+      name: "Korona",
+      color: "#f2b705",
+      role: "boss-x",
+      bossPiece: true,
+      cells: [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]],
+    };
+  }
+  throw new Error(`Unbekannter Bossstein: ${kind}`);
+}
+
+function mergeRequiredClues(placements, clues) {
+  const byId = new Map(placements.map((placement) => [placement.pieceId, placement]));
+  for (const clue of clues) {
+    if (!byId.has(clue.pieceId)) byId.set(clue.pieceId, clue);
+  }
+  return [...byId.values()];
+}
+
 function candidateOrder(placements, clues, attackIndex, seed) {
   const clueIds = new Set(clues.map((clue) => clue.pieceId));
   return [...placements].sort((left, right) => {
@@ -139,6 +171,48 @@ function candidateOrder(placements, clues, attackIndex, seed) {
     if (leftClue !== rightClue) return leftClue === preferClue ? -1 : 1;
     return hashSeed(`${seed}-${left.pieceId}`) - hashSeed(`${seed}-${right.pieceId}`);
   });
+}
+
+export function planStaticMutation({
+  puzzle,
+  placements,
+  replacementPiece,
+  attackIndex = 0,
+  seed = 0,
+}) {
+  const clues = puzzle.clues;
+  for (const stolenPlacement of candidateOrder(placements, clues, attackIndex, seed)) {
+    const stolenPiece = puzzle.model.getPiece(stolenPlacement.pieceId);
+    if (!stolenPiece || canonicalShapeKey(stolenPiece.cells) === canonicalShapeKey(replacementPiece.cells)) continue;
+    const remainingPlacements = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
+    const nextClues = clues.filter((clue) => clue.pieceId !== stolenPlacement.pieceId);
+    const nextPieces = [
+      ...puzzle.pieces.filter((piece) => piece.id !== stolenPlacement.pieceId),
+      replacementPiece,
+    ];
+    const model = createPuzzleModel({
+      pieces: nextPieces,
+      rows: puzzle.rows,
+      cols: puzzle.cols,
+      mask: puzzle.mask,
+    });
+    const locked = mergeRequiredClues(remainingPlacements, nextClues);
+    const solved = model.solve(locked, { limit: 1, seed: hashSeed(`${seed}-${stolenPlacement.pieceId}`) });
+    if (!solved.solution || !model.validateCompletedBoard(solved.solution, nextClues)) continue;
+    return {
+      stolen: {
+        piece: { ...stolenPiece, cells: stolenPiece.cells.map((cell) => [...cell]) },
+        placement: { ...stolenPlacement },
+        wasClue: clues.some((clue) => clue.pieceId === stolenPlacement.pieceId),
+      },
+      replacement: replacementPiece,
+      pieces: nextPieces,
+      clues: nextClues,
+      solution: solved.solution,
+      model,
+    };
+  }
+  return null;
 }
 
 function occupiedCells(model, placements) {
