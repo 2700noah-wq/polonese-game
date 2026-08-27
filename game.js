@@ -10,7 +10,12 @@ import {
 } from "./logic.js?v=20260819-2";
 import { createLevelPickerItems } from "./level-picker.js?v=20260820-1";
 import { pointerAnchorForPlacement, placementFromBoardPoint } from "./placement-math.js?v=20260821-1";
-import { theftEffectBounds, theftPresentationFor } from "./boss-animation.js?v=20260827-theft-1";
+import {
+  runTheftCapture,
+  runTheftPrelude,
+  theftEffectBounds,
+  theftPresentationFor,
+} from "./boss-animation.js?v=20260827-theft-2";
 import { createPuzzleModel } from "./puzzle-model.js?v=20260824-secret-1";
 import { sanitizeStats } from "./game-storage.js?v=20260826-boss-phases-1";
 import {
@@ -788,30 +793,39 @@ function clearTheftEffects() {
 }
 
 async function animateBossTheftPrelude(plan, presentation) {
-  elements.bossArena.classList.add("visible", "searching");
-  await wait(presentation.durations.search);
-  elements.bossArena.classList.remove("searching");
-  const target = setBossTargetLook(plan.stolen.piece.id);
-  elements.bossArena.classList.add("targeting", "target-locked", "blink-confirm", "grinning");
-  await wait(presentation.durations.lock);
+  const target = await runTheftPrelude(presentation, {
+    startSearch() {
+      elements.bossArena.classList.add("visible", "searching");
+    },
+    lockTarget() {
+      elements.bossArena.classList.remove("searching");
+      const lockedTarget = setBossTargetLook(plan.stolen.piece.id);
+      elements.bossArena.classList.add("targeting", "target-locked", "blink-confirm", "grinning");
+      return lockedTarget;
+    },
+    wait,
+  });
   elements.bossArena.classList.remove("blink-confirm");
   return target;
 }
 
 async function animateBossTheftCapture(target, presentation) {
-  if (!target) {
-    await wait(presentation.durations.wobble + presentation.durations.suction + presentation.durations.particles);
-    return;
-  }
-  markTheftTarget(target, presentation);
-  await wait(presentation.durations.wobble);
-  const portal = createTheftPortal(target, presentation);
-  markStolenPiece(target, presentation);
-  elements.bossArena.classList.add("stealing");
-  await wait(presentation.durations.suction);
-  portal.classList.add("closing");
-  createTheftParticles(target, presentation);
-  await wait(presentation.durations.particles);
+  await runTheftCapture(presentation, target, {
+    warnTarget(lockedTarget) {
+      markTheftTarget(lockedTarget, presentation);
+    },
+    startSuction(lockedTarget) {
+      const portal = createTheftPortal(lockedTarget, presentation);
+      markStolenPiece(lockedTarget, presentation);
+      elements.bossArena.classList.add("stealing");
+      return portal;
+    },
+    releaseParticles(lockedTarget, portal) {
+      portal.classList.add("closing");
+      createTheftParticles(lockedTarget, presentation);
+    },
+    wait,
+  });
 }
 
 function applyMutation(plan, absoluteMiss = false) {
