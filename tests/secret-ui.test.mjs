@@ -98,6 +98,20 @@ test("Trefferstatus wird bei Absolut sofort aktualisiert", () => {
   );
 });
 
+test("Absolut verliert sein Grinsen stufenweise und zeigt bei 3 keinen Zahn mehr", () => {
+  assert.match(css, /\.boss-arena\.is-absolute\[data-damage="1"\][\s\S]*--grin-scale: 0\.78/);
+  assert.match(css, /\.boss-arena\.is-absolute\[data-damage="2"\][\s\S]*--grin-scale: 0\.52/);
+  assert.match(css, /\.boss-arena\.is-absolute\[data-damage="3"\][\s\S]*--grin-scale: 0\.42/);
+  assert.match(css, /\.boss-arena\.is-absolute\[data-damage="3"\][\s\S]*\.boss-mouth i \{\s*opacity: 0/);
+  assert.match(css, /\.boss-arena\.is-absolute\[data-damage="3"\][\s\S]*\.boss-mouth::before/);
+});
+
+test("Absolut nutzt eigene 2-1-0-Phasen und einen getrennten Miss-Wiederholungsweg", () => {
+  assert.match(bossEngine, /ABSOLUTE_REMAINING_TRIGGERS = \[2, 1, 0\]/);
+  assert.match(bossEngine, /function shouldStartAbsoluteRetry/);
+  assert.match(game, /shouldStartAbsoluteAttack\([\s\S]*shouldStartAbsoluteRetry/);
+});
+
 test("isolierte 390-Pixel-Testansicht ist vorhanden", () => {
   const mobilePreview = readFileSync(new URL("./mobile-preview.html", import.meta.url), "utf8");
   assert.match(mobilePreview, /width:\s*390px/);

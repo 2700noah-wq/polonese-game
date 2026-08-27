@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ABSOLUTE_HITS_TO_WIN,
+  ABSOLUTE_REMAINING_TRIGGERS,
   NORMAL_BOSS_REMAINING_TRIGGERS,
   NORMAL_BOSS_THEFTS,
   canFinishBoss,
@@ -11,6 +12,7 @@ import {
   recordAbsoluteMiss,
   recordTheft,
   shouldStartAbsoluteAttack,
+  shouldStartAbsoluteRetry,
   shouldStartNormalAttack,
 } from "../boss-engine.js";
 
@@ -44,20 +46,51 @@ test("normale Bosse greifen phasenabhängig bei 2, 1 und 0 übrigen Steinen an",
   assert.equal(canFinishBoss(boss, true), true);
 });
 
-test("Absolut darf unbegrenzt verpasst werden und behält erfolgreiche Treffer", () => {
+test("Absolut greift phasenabhängig bei 2, 1 und 0 übrigen Steinen an", () => {
   const boss = createBossState("absolute");
+  assert.deepEqual(ABSOLUTE_REMAINING_TRIGGERS, [2, 1, 0]);
+
   assert.equal(shouldStartAbsoluteAttack(boss, 8, 10), true);
-  for (let index = 0; index < 12; index += 1) recordAbsoluteMiss(boss, { piece: { id: `miss-${index}` } });
-  assert.equal(boss.attackCount, 12);
+  assert.equal(shouldStartAbsoluteAttack(boss, 9, 10), false);
+  assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), false);
+  recordAbsoluteMiss(boss, { piece: { id: "phase-1" } });
+
+  assert.equal(shouldStartAbsoluteAttack(boss, 8, 10), false);
+  assert.equal(shouldStartAbsoluteAttack(boss, 9, 10), true);
+  assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), false);
+  recordAbsoluteMiss(boss, { piece: { id: "phase-2" } });
+
+  assert.equal(shouldStartAbsoluteAttack(boss, 9, 10), false);
+  assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), true);
+  recordAbsoluteMiss(boss, { piece: { id: "phase-3" } });
+
+  assert.equal(boss.attackCount, 3);
+  assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), false, "die drei Haupttrigger sind verbraucht");
+  assert.equal(shouldStartAbsoluteRetry(boss, 10, 10), true, "verpasste Absolut-Angriffe bleiben wiederholbar");
   assert.equal(boss.hits, 0);
+
   recordAbsoluteHit(boss);
   recordAbsoluteHit(boss);
-  recordAbsoluteMiss(boss, { piece: { id: "later-miss" } });
-  assert.equal(boss.hits, 2);
-  assert.equal(boss.dead, false);
   recordAbsoluteHit(boss);
   assert.equal(boss.hits, ABSOLUTE_HITS_TO_WIN);
   assert.equal(boss.dead, true);
-  assert.equal(shouldStartAbsoluteAttack(boss, 8, 10), false);
+  assert.equal(shouldStartAbsoluteRetry(boss, 10, 10), false);
+  assert.equal(canFinishBoss(boss, true), true);
+});
+
+test("Absolut verarbeitet Treffer in allen drei Hauptphasen ohne Diebstahl", () => {
+  const boss = createBossState("absolute");
+
+  assert.equal(shouldStartAbsoluteAttack(boss, 8, 10), true);
+  recordAbsoluteHit(boss);
+  assert.equal(shouldStartAbsoluteAttack(boss, 9, 10), true);
+  recordAbsoluteHit(boss);
+  assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), true);
+  recordAbsoluteHit(boss);
+
+  assert.equal(boss.attackCount, 3);
+  assert.equal(boss.hits, 3);
+  assert.equal(boss.dead, true);
+  assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), false);
   assert.equal(canFinishBoss(boss, true), true);
 });

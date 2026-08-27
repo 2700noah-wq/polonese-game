@@ -1,6 +1,7 @@
 export const NORMAL_BOSS_THEFTS = 3;
 export const ABSOLUTE_HITS_TO_WIN = 3;
 export const NORMAL_BOSS_REMAINING_TRIGGERS = [2, 1, 0];
+export const ABSOLUTE_REMAINING_TRIGGERS = [2, 1, 0];
 
 export function createBossState(bossId) {
   return {
@@ -30,12 +31,29 @@ export function shouldStartNormalAttack(bossState, placedCount, pieceCount) {
 }
 
 export function shouldStartAbsoluteAttack(bossState, placedCount, pieceCount) {
+  const remainingTrigger = ABSOLUTE_REMAINING_TRIGGERS[bossState?.attackCount];
   return Boolean(
     bossState
     && isAbsoluteBoss(bossState)
     && !bossState.dead
     && bossState.hits < ABSOLUTE_HITS_TO_WIN
-    && placedCount === pieceCount - 2,
+    && Number.isInteger(remainingTrigger)
+    && pieceCount - placedCount === remainingTrigger,
+  );
+}
+
+// Die drei definierten Phasen werden nur einmal automatisch ausgelöst. Wenn
+// Absolut einen Angriff verpasst, bleibt der bisherige Kampf aber wiederholbar:
+// Nach dem Auffüllen des Ersatzsteins kann der Spieler weitere Treffer sammeln.
+// Dieser Rückweg ist absichtlich getrennt vom 2→1→0-Phasentrigger.
+export function shouldStartAbsoluteRetry(bossState, placedCount, pieceCount) {
+  return Boolean(
+    bossState
+    && isAbsoluteBoss(bossState)
+    && !bossState.dead
+    && bossState.hits < ABSOLUTE_HITS_TO_WIN
+    && bossState.attackCount >= ABSOLUTE_REMAINING_TRIGGERS.length
+    && pieceCount - placedCount === 0,
   );
 }
 

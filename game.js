@@ -41,8 +41,9 @@ import {
   recordAbsoluteMiss,
   recordTheft,
   shouldStartAbsoluteAttack,
+  shouldStartAbsoluteRetry,
   shouldStartNormalAttack,
-} from "./boss-engine.js?v=20260826-boss-phases-1";
+} from "./boss-engine.js?v=20260827-absolute-phases-face-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -404,6 +405,7 @@ function validateSecretFuture(placements) {
 
   const mustPrepareAttack = isAbsoluteBoss(state.boss)
     ? shouldStartAbsoluteAttack(state.boss, placements.length, currentPieces().length)
+      || shouldStartAbsoluteRetry(state.boss, placements.length, currentPieces().length)
     : shouldStartNormalAttack(state.boss, placements.length, currentPieces().length);
   if (!mustPrepareAttack) {
     state.boss.pendingMutation = null;
@@ -656,7 +658,9 @@ async function checkProgress() {
     return;
   }
   if (isAbsoluteBoss(state.boss)) {
-    if (shouldStartAbsoluteAttack(state.boss, state.placed.size, currentPieces().length)) {
+    const absoluteAttackReady = shouldStartAbsoluteAttack(state.boss, state.placed.size, currentPieces().length)
+      || shouldStartAbsoluteRetry(state.boss, state.placed.size, currentPieces().length);
+    if (absoluteAttackReady) {
       await runAbsoluteAttack();
       return;
     }
