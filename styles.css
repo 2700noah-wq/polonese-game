@@ -619,6 +619,8 @@ h2 {
 .game-board {
   --board-cols: 10;
   --board-rows: 5;
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: repeat(var(--board-cols), 1fr);
   aspect-ratio: var(--board-cols) / var(--board-rows);
@@ -699,6 +701,7 @@ h2 {
 
 .board-cell {
   position: relative;
+  z-index: 2;
   aspect-ratio: 1;
   padding: 0;
   overflow: visible;
@@ -715,15 +718,116 @@ h2 {
   pointer-events: none;
 }
 
+.board-cell.theft-target-wobble {
+  z-index: 8;
+  animation: theft-target-wobble var(--wobble-duration, 150ms) ease-in-out both;
+}
+
 .board-cell.being-stolen {
-  z-index: 30;
-  animation: stolen-piece 800ms cubic-bezier(0.2, 0.75, 0.3, 1) forwards;
+  z-index: 10;
+  transform-origin: center;
+  animation: stolen-piece var(--suction-duration, 300ms) cubic-bezier(0.2, 0.72, 0.22, 1) forwards;
+}
+
+.theft-portal,
+.theft-particles {
+  position: absolute;
+  pointer-events: none;
+}
+
+.theft-portal {
+  z-index: 1;
+  overflow: hidden;
+  border: var(--portal-ring, 3px) solid rgba(255, 28, 66, 0.9);
+  border-radius: 48%;
+  background:
+    radial-gradient(ellipse at center, rgba(7, 0, 7, 0.98) 0 33%, rgba(87, 0, 19, 0.94) 48%, rgba(235, 0, 48, 0.88) 67%, rgba(255, 63, 80, 0.22) 78%, transparent 82%);
+  box-shadow:
+    0 0 var(--portal-glow, 32px) rgba(239, 0, 45, 0.88),
+    inset 0 0 var(--portal-inner-glow, 24px) rgba(255, 38, 73, 0.92);
+  opacity: 0;
+  transform: scale(0.58) rotate(-7deg);
+}
+
+.theft-portal.active {
+  animation: theft-portal-open var(--portal-duration, 300ms) cubic-bezier(0.15, 0.78, 0.24, 1) forwards;
+}
+
+.theft-portal.active.closing {
+  animation: theft-portal-close var(--particle-duration, 250ms) ease-in forwards;
+}
+
+.theft-portal i {
+  position: absolute;
+  inset: 6%;
+  border: var(--portal-inner-ring, 2px) dashed rgba(255, 146, 159, 0.88);
+  border-radius: inherit;
+  animation: theft-ring-spin 420ms linear infinite;
+}
+
+.theft-portal i:nth-child(2) {
+  inset: 15%;
+  border-style: dotted;
+  animation-direction: reverse;
+  animation-duration: 310ms;
+}
+
+.theft-portal i:nth-child(3) {
+  inset: 27%;
+  border-color: rgba(255, 40, 69, 0.94);
+  animation-duration: 240ms;
+}
+
+.theft-particles {
+  z-index: 14;
+}
+
+.theft-particles i {
+  position: absolute;
+  width: var(--particle-size, 4px);
+  height: var(--particle-size, 4px);
+  border-radius: 50%;
+  background: #ff153f;
+  box-shadow: 0 0 7px rgba(255, 0, 48, 0.95);
+  opacity: 0;
+  animation: theft-particle var(--particle-duration, 250ms) ease-out forwards;
+}
+
+@keyframes theft-target-wobble {
+  0%, 100% { transform: translateX(0) rotate(0deg); filter: brightness(1); }
+  18% { transform: translateX(var(--wobble-negative, -3px)) rotate(-2deg); }
+  38% { transform: translateX(var(--wobble-distance, 3px)) rotate(2deg); filter: brightness(1.24); }
+  58% { transform: translateX(var(--wobble-negative-soft, -2px)) rotate(-1.4deg); }
+  78% { transform: translateX(var(--wobble-positive-soft, 1.7px)) rotate(1deg); }
 }
 
 @keyframes stolen-piece {
-  0% { opacity: 1; transform: scale(1); filter: brightness(1); }
-  45% { opacity: 1; transform: scale(1.2) rotate(8deg); filter: brightness(1.4); }
-  100% { opacity: 0; transform: translate(var(--steal-x, 36px), var(--steal-y, -75px)) scale(0.2) rotate(40deg); filter: brightness(0.4); }
+  0% { opacity: 1; transform: translate(0, 0) scale(1); filter: brightness(1); }
+  18% { opacity: 1; transform: translate(0, 1px) scale(0.94); filter: brightness(0.9) saturate(1.18); }
+  48% { opacity: 0.96; transform: translate(var(--suck-step-x, 0), var(--suck-step-y, 0)) scale(0.72) rotate(-2deg); filter: brightness(1.35) saturate(1.4); }
+  72% { opacity: 0.78; transform: translate(var(--suck-final-x, 0), var(--suck-final-y, 0)) scale(0.36) rotate(3deg); filter: brightness(0.72) saturate(1.6); }
+  100% { opacity: 0; transform: translate(var(--suck-final-x, 0), var(--suck-final-y, 0)) scale(0.04) rotate(8deg); filter: brightness(0.28) blur(1px); }
+}
+
+@keyframes theft-portal-open {
+  0% { opacity: 0; transform: scale(0.58) rotate(-7deg); filter: brightness(0.75); }
+  26% { opacity: 1; transform: scale(1.06) rotate(2deg); filter: brightness(1.35); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); filter: brightness(1); }
+}
+
+@keyframes theft-portal-close {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.34) rotate(18deg); }
+}
+
+@keyframes theft-ring-spin {
+  to { rotate: 360deg; }
+}
+
+@keyframes theft-particle {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.55); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--particle-x, 0), var(--particle-y, -16px)) scale(0.08); }
 }
 
 .board-cell:hover {
@@ -1472,7 +1576,7 @@ body.dragging-piece .board-wrap {
   pointer-events: none;
   transform: translate(-50%, -135%) scale(0.7) rotate(-8deg);
   transform-origin: center;
-  transition: transform 620ms cubic-bezier(0.2, 0.9, 0.25, 1.15), opacity 260ms ease;
+  transition: transform var(--boss-entry-duration, 620ms) cubic-bezier(0.2, 0.9, 0.25, 1.15), opacity 180ms ease;
 }
 
 .boss-arena.visible .boss-creature {
@@ -1537,6 +1641,7 @@ body.dragging-piece .board-wrap {
     radial-gradient(circle at 30% 22%, color-mix(in srgb, var(--boss-accent) 70%, white), transparent 18%),
     linear-gradient(145deg, color-mix(in srgb, var(--boss-color) 76%, white), var(--boss-color) 46%, color-mix(in srgb, var(--boss-color) 55%, #0b0207));
   box-shadow: inset -12px -15px 22px rgba(12, 2, 7, 0.34), 0 18px 30px rgba(29, 3, 13, 0.34);
+  transition: transform 150ms ease;
 }
 
 .boss-horn {
@@ -1714,9 +1819,19 @@ body.dragging-piece .board-wrap {
 .boss-arena[data-position="right"] .boss-portal { top: 35%; left: 88%; }
 .boss-arena[data-position="top"] .boss-portal { top: 20%; }
 
+.boss-arena.searching .boss-body { animation: boss-search var(--boss-search-duration, 350ms) ease-in-out both; }
+.boss-arena.searching .boss-eye i { animation: boss-eye-search var(--boss-search-duration, 350ms) steps(4, end) both; }
+.boss-arena.target-locked .boss-body {
+  transform: translate(var(--target-head-x, 0), var(--target-head-y, 0)) rotate(var(--target-head-turn, 0deg));
+}
+.boss-arena.target-locked .boss-eye i {
+  animation: none;
+  transform: translate(calc(-50% + var(--target-look-x, 0px)), calc(-50% + var(--target-look-y, 0px)));
+}
+.boss-arena.blink-confirm .boss-eye { animation: boss-double-blink var(--boss-lock-duration, 350ms) linear both; }
 .boss-arena.grinning .boss-mouth { animation: boss-grin 500ms ease forwards; }
-.boss-arena.targeting .boss-eye i { animation: boss-look 480ms ease-in-out infinite alternate; }
-.boss-arena.stealing .boss-creature { animation: boss-snatch 820ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.boss-arena.targeting:not(.target-locked) .boss-eye i { animation: boss-look 480ms ease-in-out infinite alternate; }
+.boss-arena.stealing .boss-creature { animation: boss-snatch var(--boss-snatch-duration, 300ms) cubic-bezier(0.2, 0.8, 0.2, 1); }
 .boss-arena.hit .boss-creature { animation: boss-hit 620ms ease; }
 .boss-arena.crown-fly .boss-crown { display: block; animation: crown-fly 950ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
 
@@ -1778,6 +1893,27 @@ body.boss-sequence-active .mobile-action-bar {
 @keyframes boss-grin {
   0% { transform: scaleX(var(--grin-scale, 0.88)) scaleY(0.72); }
   100% { transform: scaleX(calc(var(--grin-scale, 0.88) * 1.12)) scaleY(1.08); }
+}
+
+@keyframes boss-search {
+  0% { transform: translate(-3px, 0) rotate(-3deg); }
+  28% { transform: translate(3px, 1px) rotate(2.5deg); }
+  56% { transform: translate(-2px, 2px) rotate(-1.5deg); }
+  82% { transform: translate(2px, 1px) rotate(1.5deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes boss-eye-search {
+  0% { transform: translate(-92%, -42%); }
+  25% { transform: translate(-10%, -70%); }
+  50% { transform: translate(4%, 8%); }
+  75% { transform: translate(-92%, 7%); }
+  100% { transform: translate(-50%, -50%); }
+}
+
+@keyframes boss-double-blink {
+  0%, 14%, 31%, 43%, 61%, 100% { clip-path: inset(0 0 0 0 round 50%); }
+  20%, 25%, 49%, 55% { clip-path: inset(48% 0 48% 0 round 50%); }
 }
 
 @keyframes boss-look {
