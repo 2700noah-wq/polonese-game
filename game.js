@@ -10,6 +10,7 @@ import {
 } from "./logic.js?v=20260819-2";
 import { createLevelPickerItems } from "./level-picker.js?v=20260820-1";
 import { pointerAnchorForPlacement, placementFromBoardPoint } from "./placement-math.js?v=20260821-1";
+import { theftEffectBounds, theftPresentationFor } from "./boss-animation.js?v=20260827-theft-1";
 import { createPuzzleModel } from "./puzzle-model.js?v=20260824-secret-1";
 import { sanitizeStats } from "./game-storage.js?v=20260826-boss-phases-1";
 import {
@@ -157,6 +158,8 @@ let dragGhost = null;
 let suppressClickUntil = 0;
 let bossHitResolver = null;
 let bossHitTimeoutId = null;
+let activeTheftPortal = null;
+let activeTheftParticles = null;
 
 function saveStats() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
@@ -249,6 +252,7 @@ function resetInteractionState() {
   dragGhost?.remove();
   dragGhost = null;
   elements.body.classList.remove("dragging-piece", "boss-sequence-active");
+  clearTheftEffects();
   hideBossArena();
 }
 
@@ -607,20 +611,28 @@ async function checkProgress() {
 
 function configureBossArena(position = "top") {
   const config = BOSS_CONFIG[state.bossId];
+  const presentation = theftPresentationFor(state.bossId);
   elements.bossArena.className = "boss-arena";
   elements.bossArena.dataset.boss = state.bossId;
   elements.bossArena.dataset.position = position;
   elements.bossArena.dataset.damage = String(state.boss?.hits ?? 0);
   elements.bossArena.style.setProperty("--boss-color", config.color);
   elements.bossArena.style.setProperty("--boss-accent", config.accent);
+  elements.bossArena.style.setProperty("--theft-intensity", String(presentation.intensity));
+  elements.bossArena.style.setProperty("--boss-search-duration", `${presentation.durations.search}ms`);
+  elements.bossArena.style.setProperty("--boss-lock-duration", `${presentation.durations.lock}ms`);
+  elements.bossArena.style.setProperty("--boss-snatch-duration", `${presentation.durations.suction}ms`);
+  elements.bossArena.style.setProperty("--boss-entry-duration", `${Math.round(180 * presentation.speed)}ms`);
   elements.bossArena.classList.toggle("is-absolute", state.bossId === "absolute");
   elements.bossArena.setAttribute("aria-hidden", "false");
+  return presentation;
 }
 
 function hideBossArena() {
   window.clearTimeout(bossHitTimeoutId);
   bossHitTimeoutId = null;
   bossHitResolver = null;
+  clearTheftEffects();
   if (!elements.bossArena) return;
   elements.bossArena.className = "boss-arena";
   elements.bossArena.removeAttribute("data-position");
@@ -635,17 +647,171 @@ function setInputLocked(locked) {
   renderStatus();
 }
 
-function markStolenPiece(pieceId, position) {
-  const stealVector = {
-    left: ["-95px", "-25px"],
-    right: ["95px", "-25px"],
-    top: ["0px", "-95px"],
-  }[position] ?? ["0px", "-90px"];
-  elements.gameBoard.querySelectorAll(`[data-owner="${pieceId}"]`).forEach((cell) => {
-    cell.style.setProperty("--steal-x", stealVector[0]);
-    cell.style.setProperty("--steal-y", stealVector[1]);
+function targetCellsFor(pieceId) {
+  return [...elements.gameBoard.querySelectorAll(`[data-owner="${pieceId}"]`)];
+}
+
+function theftTargetFor(pieceId) {
+  const cells = targetCellsFor(pieceId);
+  const boardRect = elements.gameBoard.getBoundingClientRect();
+  const geometry = theftEffectBounds(boardRect, cells.map((cell) => cell.getBoundingClientRect()));
+  return geometry ? { cells, boardRect, geometry } : null;
+}
+
+function setBossTargetLook(pieceId) {
+  const target = theftTargetFor(pieceId);
+  if (!target) return null;
+  const bossRect = elements.bossCreature.querySelector(".boss-body")?.getBoundingClientRect();
+  if (!bossRect?.width || !bossRect?.height) return target;
+
+  const targetX = target.boardRect.left + target.geometry.targetCenterX;
+  const targetY = target.boardRect.top + target.geometry.targetCenterY;
+  const deltaX = targetX - (bossRect.left + bossRect.width / 2);
+  const deltaY = targetY - (bossRect.top + bossRect.height / 2);
+  const distance = Math.max(1, Math.hypot(deltaX, deltaY));
+  const lookX = Math.max(-8, Math.min(8, (deltaX / distance) * 8));
+  const lookY = Math.max(-6, Math.min(6, (deltaY / distance) * 6));
+  const headShiftX = Math.max(-3, Math.min(3, (deltaX / distance) * 3));
+  const headShiftY = Math.max(-2, Math.min(3, (deltaY / distance) * 3));
+  const headTurn = Math.max(-5, Math.min(5, (deltaX / distance) * 5));
+
+  elements.bossArena.style.setProperty("--target-look-x", `${lookX.toFixed(1)}px`);
+  elements.bossArena.style.setProperty("--target-look-y", `${lookY.toFixed(1)}px`);
+  elements.bossArena.style.setProperty("--target-head-x", `${headShiftX.toFixed(1)}px`);
+  elements.bossArena.style.setProperty("--target-head-y", `${headShiftY.toFixed(1)}px`);
+  elements.bossArena.style.setProperty("--target-head-turn", `${headTurn.toFixed(1)}deg`);
+  return target;
+}
+
+function positionTheftEffect(element, geometry) {
+  element.style.left = `${geometry.left}px`;
+  element.style.top = `${geometry.top}px`;
+  element.style.width = `${geometry.width}px`;
+  element.style.height = `${geometry.height}px`;
+}
+
+function createTheftPortal(target, presentation) {
+  const portal = document.createElement("span");
+  portal.className = "theft-portal";
+  portal.setAttribute("aria-hidden", "true");
+  portal.style.setProperty("--portal-glow", `${Math.round(18 + presentation.intensity * 14)}px`);
+  portal.style.setProperty("--portal-inner-glow", `${Math.round(13 + presentation.intensity * 10)}px`);
+  portal.style.setProperty("--portal-ring", `${Math.max(2, target.geometry.cellSize * 0.09).toFixed(1)}px`);
+  portal.style.setProperty("--portal-inner-ring", `${Math.max(1, target.geometry.cellSize * 0.05).toFixed(1)}px`);
+  portal.style.setProperty("--portal-duration", `${presentation.durations.suction}ms`);
+  portal.style.setProperty("--particle-duration", `${presentation.durations.particles}ms`);
+  positionTheftEffect(portal, target.geometry);
+  for (let index = 0; index < 3; index += 1) portal.append(document.createElement("i"));
+  elements.gameBoard.append(portal);
+  activeTheftPortal = portal;
+  portal.getBoundingClientRect();
+  portal.classList.add("active");
+  return portal;
+}
+
+function markTheftTarget(target, presentation) {
+  const distance = Math.max(2, Math.min(5, 1.8 + presentation.intensity * 1.7));
+  target.cells.forEach((cell) => {
+    cell.style.setProperty("--wobble-distance", `${distance.toFixed(1)}px`);
+    cell.style.setProperty("--wobble-negative", `${(-distance).toFixed(1)}px`);
+    cell.style.setProperty("--wobble-negative-soft", `${(-distance * 0.65).toFixed(1)}px`);
+    cell.style.setProperty("--wobble-positive-soft", `${(distance * 0.55).toFixed(1)}px`);
+    cell.style.setProperty("--wobble-duration", `${presentation.durations.wobble}ms`);
+    cell.classList.add("theft-target-wobble");
+  });
+}
+
+function markStolenPiece(target, presentation) {
+  target.cells.forEach((cell) => {
+    const rect = cell.getBoundingClientRect();
+    const cellCenterX = rect.left - target.boardRect.left + rect.width / 2;
+    const cellCenterY = rect.top - target.boardRect.top + rect.height / 2;
+    const pullX = Math.max(-16, Math.min(16, (target.geometry.centerX - cellCenterX) * 0.34));
+    const pullY = Math.max(-12, Math.min(12, (target.geometry.centerY - cellCenterY) * 0.34));
+    cell.style.setProperty("--suck-step-x", `${(pullX * 0.48).toFixed(1)}px`);
+    cell.style.setProperty("--suck-step-y", `${(pullY * 0.48).toFixed(1)}px`);
+    cell.style.setProperty("--suck-final-x", `${pullX.toFixed(1)}px`);
+    cell.style.setProperty("--suck-final-y", `${pullY.toFixed(1)}px`);
+    cell.style.setProperty("--suction-duration", `${presentation.durations.suction}ms`);
+    cell.classList.remove("theft-target-wobble");
     cell.classList.add("being-stolen");
   });
+}
+
+function createTheftParticles(target, presentation) {
+  const particles = document.createElement("span");
+  particles.className = "theft-particles";
+  particles.setAttribute("aria-hidden", "true");
+  particles.style.setProperty("--particle-duration", `${presentation.durations.particles}ms`);
+  positionTheftEffect(particles, target.geometry);
+
+  for (let index = 0; index < presentation.particles; index += 1) {
+    const particle = document.createElement("i");
+    const progress = (index + 0.5) / presentation.particles;
+    const angle = progress * Math.PI * 4.8 + presentation.intensity;
+    const startX = target.geometry.width * (0.18 + ((index * 37) % 64) / 100);
+    const startY = target.geometry.height * (0.2 + ((index * 53) % 60) / 100);
+    const travel = target.geometry.cellSize * (0.42 + presentation.intensity * 0.28 + (index % 3) * 0.09);
+    const size = Math.max(2.5, Math.min(7, target.geometry.cellSize * (0.07 + presentation.intensity * 0.025)));
+    particle.style.left = `${startX.toFixed(1)}px`;
+    particle.style.top = `${startY.toFixed(1)}px`;
+    particle.style.setProperty("--particle-x", `${(Math.cos(angle) * travel).toFixed(1)}px`);
+    particle.style.setProperty("--particle-y", `${(Math.sin(angle) * travel).toFixed(1)}px`);
+    particle.style.setProperty("--particle-size", `${size.toFixed(1)}px`);
+    particles.append(particle);
+  }
+  elements.gameBoard.append(particles);
+  activeTheftParticles = particles;
+  return particles;
+}
+
+function clearTheftEffects() {
+  activeTheftPortal?.remove();
+  activeTheftParticles?.remove();
+  activeTheftPortal = null;
+  activeTheftParticles = null;
+  elements.gameBoard?.querySelectorAll(".theft-target-wobble, .being-stolen").forEach((cell) => {
+    cell.classList.remove("theft-target-wobble", "being-stolen");
+    [
+      "--wobble-distance",
+      "--wobble-negative",
+      "--wobble-negative-soft",
+      "--wobble-positive-soft",
+      "--wobble-duration",
+      "--suck-step-x",
+      "--suck-step-y",
+      "--suck-final-x",
+      "--suck-final-y",
+      "--suction-duration",
+    ].forEach((property) => cell.style.removeProperty(property));
+  });
+}
+
+async function animateBossTheftPrelude(plan, presentation) {
+  elements.bossArena.classList.add("visible", "searching");
+  await wait(presentation.durations.search);
+  elements.bossArena.classList.remove("searching");
+  const target = setBossTargetLook(plan.stolen.piece.id);
+  elements.bossArena.classList.add("targeting", "target-locked", "blink-confirm", "grinning");
+  await wait(presentation.durations.lock);
+  elements.bossArena.classList.remove("blink-confirm");
+  return target;
+}
+
+async function animateBossTheftCapture(target, presentation) {
+  if (!target) {
+    await wait(presentation.durations.wobble + presentation.durations.suction + presentation.durations.particles);
+    return;
+  }
+  markTheftTarget(target, presentation);
+  await wait(presentation.durations.wobble);
+  const portal = createTheftPortal(target, presentation);
+  markStolenPiece(target, presentation);
+  elements.bossArena.classList.add("stealing");
+  await wait(presentation.durations.suction);
+  portal.classList.add("closing");
+  createTheftParticles(target, presentation);
+  await wait(presentation.durations.particles);
 }
 
 function applyMutation(plan, absoluteMiss = false) {
@@ -677,20 +843,18 @@ async function runNormalBossTheft() {
   }
   const position = ["right", "left", "top"][state.boss.thefts.length % 3];
   setInputLocked(true);
-  configureBossArena(position);
-  elements.bossArena.classList.add("visible");
-  await wait(650);
-  elements.bossArena.classList.add("targeting", "grinning");
-  await wait(620);
-  markStolenPiece(plan.stolen.piece.id, position);
-  elements.bossArena.classList.add("stealing");
-  await wait(820);
-  applyMutation(plan, false);
-  setBoardMessage(`Der Boss hat ${plan.stolen.piece.name} gestohlen und ${plan.replacement.name} zurückgelassen.`);
-  showToast(`Bossangriff ${state.boss.thefts.length} von ${NORMAL_BOSS_THEFTS}`);
-  await wait(520);
-  hideBossArena();
-  setInputLocked(false);
+  const presentation = configureBossArena(position);
+  try {
+    const target = await animateBossTheftPrelude(plan, presentation);
+    await animateBossTheftCapture(target, presentation);
+    applyMutation(plan, false);
+    setBoardMessage(`Der Boss hat ${plan.stolen.piece.name} gestohlen und ${plan.replacement.name} zurückgelassen.`);
+    showToast(`Bossangriff ${state.boss.thefts.length} von ${NORMAL_BOSS_THEFTS}`);
+    await wait(140);
+  } finally {
+    hideBossArena();
+    setInputLocked(false);
+  }
 }
 
 function chooseAbsolutePosition() {
@@ -728,6 +892,7 @@ function waitForBossHit(milliseconds) {
 
 async function animateAbsoluteHit() {
   const nextHit = state.boss.hits + 1;
+  elements.bossArena.classList.remove("searching", "targeting", "target-locked", "blink-confirm", "grinning");
   elements.bossArena.classList.add("hit");
   if (nextHit === 1) elements.bossArena.classList.add("crown-fly");
   await wait(nextHit === 1 ? 950 : 680);
@@ -769,12 +934,10 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
 
   if (!alreadyLocked) setInputLocked(true);
   const position = chooseAbsolutePosition();
-  configureBossArena(position);
+  const presentation = configureBossArena(position);
   elements.bossArena.classList.add("portal-open");
-  await wait(520);
-  elements.bossArena.classList.add("visible");
-  await wait(620);
-  elements.bossArena.classList.add("targeting", "grinning");
+  await wait(Math.round(300 * presentation.speed));
+  const target = await animateBossTheftPrelude(plan, presentation);
   setBoardMessage("Der Boss fixiert einen Stein …");
   const hit = await waitForBossHit(absoluteReactionWindow(state.boss.hits));
 
@@ -783,15 +946,16 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
     return;
   }
 
-  markStolenPiece(plan.stolen.piece.id, position);
-  elements.bossArena.classList.add("stealing");
-  await wait(820);
-  applyMutation(plan, true);
-  setBoardMessage(`Zu spät! Absolut hat ${plan.stolen.piece.name} durch ${plan.replacement.name} ersetzt.`);
-  showToast(`Angriff verpasst · ${state.boss.hits} von ${ABSOLUTE_HITS_TO_WIN} Treffern bleiben erhalten`);
-  await wait(520);
-  hideBossArena();
-  setInputLocked(false);
+  try {
+    await animateBossTheftCapture(target, presentation);
+    applyMutation(plan, true);
+    setBoardMessage(`Zu spät! Absolut hat ${plan.stolen.piece.name} durch ${plan.replacement.name} ersetzt.`);
+    showToast(`Angriff verpasst · ${state.boss.hits} von ${ABSOLUTE_HITS_TO_WIN} Treffern bleiben erhalten`);
+    await wait(140);
+  } finally {
+    hideBossArena();
+    setInputLocked(false);
+  }
 }
 
 function renderTemplate() {
