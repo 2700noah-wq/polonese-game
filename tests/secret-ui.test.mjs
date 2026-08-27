@@ -5,6 +5,7 @@ import test from "node:test";
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 const game = readFileSync(new URL("../game.js", import.meta.url), "utf8");
+const bossAnimation = readFileSync(new URL("../boss-animation.js", import.meta.url), "utf8");
 const bossEngine = readFileSync(new URL("../boss-engine.js", import.meta.url), "utf8");
 const secretLevels = readFileSync(new URL("../secret-levels.js", import.meta.url), "utf8");
 
@@ -14,11 +15,46 @@ test("Endless ist vollständig aus Oberfläche und Spielsteuerung entfernt", () 
   assert.match(html, /data-mode="secret"/);
 });
 
-test("Portal gehört ausschließlich zur Absolut-Darstellung", () => {
+test("Boss-Erscheinungsportal gehört ausschließlich zur Absolut-Darstellung", () => {
   assert.match(html, /class="boss-portal"/);
   assert.match(css, /\.boss-portal\s*\{[^}]*display:\s*none/s);
   assert.match(css, /\.boss-arena\.is-absolute \.boss-portal/);
   assert.match(game, /classList\.toggle\("is-absolute", state\.bossId === "absolute"\)/);
+});
+
+test("Diebstahl zeigt Suche, Zielblick, Doppelblinzeln, Wackeln, Zielportal und Partikel", () => {
+  assert.match(game, /classList\.add\("visible", "searching"\)/);
+  assert.match(game, /setBossTargetLook\(plan\.stolen\.piece\.id\)/);
+  assert.match(game, /classList\.add\("targeting", "target-locked", "blink-confirm", "grinning"\)/);
+  assert.match(game, /markTheftTarget\(target, presentation\)/);
+  assert.match(game, /createTheftPortal\(target, presentation\)/);
+  assert.match(game, /markStolenPiece\(target, presentation\)/);
+  assert.match(game, /createTheftParticles\(target, presentation\)/);
+  assert.match(css, /@keyframes boss-search/);
+  assert.match(css, /@keyframes boss-double-blink/);
+  assert.match(css, /@keyframes theft-target-wobble/);
+  assert.match(css, /@keyframes theft-portal-open/);
+  assert.match(css, /@keyframes stolen-piece/);
+  assert.match(css, /@keyframes theft-particle/);
+});
+
+test("visuelle Sequenz übernimmt das vorhandene Diebstahlziel und mutiert erst danach", () => {
+  assert.match(
+    game,
+    /const target = await animateBossTheftPrelude\(plan, presentation\);\s*await animateBossTheftCapture\(target, presentation\);\s*applyMutation\(plan, false\);/,
+  );
+  assert.match(
+    game,
+    /await animateBossTheftCapture\(target, presentation\);\s*applyMutation\(plan, true\);/,
+  );
+  assert.doesNotMatch(bossAnimation, /planNovelMutation|recordTheft|shouldStartNormalAttack|solve\(/);
+});
+
+test("Zielportal und Partikel bleiben auf das Brett begrenzt und blockieren keine Eingaben", () => {
+  assert.match(css, /\.board-wrap\s*\{[^}]*overflow:\s*hidden/s);
+  assert.match(css, /\.theft-portal,\s*\.theft-particles\s*\{[^}]*pointer-events:\s*none/s);
+  assert.match(game, /theftEffectBounds\(boardRect, cells\.map/);
+  assert.ok((game.match(/finally \{\s*hideBossArena\(\);\s*setInputLocked\(false\);\s*\}/g) ?? []).length >= 2);
 });
 
 test("Touchziel, mobile Bossansicht und Wiederfreigabe der Steuerung sind vorgesehen", () => {
