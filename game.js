@@ -10,6 +10,7 @@ import {
 } from "./logic.js?v=20260819-2";
 import { createLevelPickerItems } from "./level-picker.js?v=20260820-1";
 import { pointerAnchorForPlacement, placementFromBoardPoint } from "./placement-math.js?v=20260821-1";
+import { clearDragArtifacts, releaseCapturedPointer } from "./drag-cleanup.js?v=20260827-mobile-drag-1";
 import {
   runTheftCapture,
   runTheftPrelude,
@@ -169,22 +170,16 @@ let activeTheftPortal = null;
 let activeTheftParticles = null;
 
 function removeAllDragGhosts({ clearBodyState = true } = {}) {
-  dragGhost?.remove();
-  document.querySelectorAll(".drag-ghost").forEach((ghost) => ghost.remove());
+  clearDragArtifacts({
+    ghost: dragGhost,
+    root: document,
+    body: clearBodyState ? elements.body : null,
+  });
   dragGhost = null;
-  if (clearBodyState) elements.body.classList.remove("dragging-piece");
 }
 
 function releaseDragPointer(session) {
-  const target = session?.captureTarget;
-  if (!target?.releasePointerCapture) return;
-  try {
-    if (!target.hasPointerCapture || target.hasPointerCapture(session.pointerId)) {
-      target.releasePointerCapture(session.pointerId);
-    }
-  } catch {
-    // Der Browser kann die Capture bei pointercancel bereits selbst freigegeben haben.
-  }
+  releaseCapturedPointer(session);
 }
 
 function clearDragSession({ clearPreview = true } = {}) {
