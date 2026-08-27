@@ -1381,11 +1381,6 @@ function beginPotentialDrag(event, pieceId, source, sourceCellIndex = null) {
     clearDragSession();
   }
   const captureTarget = event.currentTarget;
-  try {
-    captureTarget?.setPointerCapture?.(event.pointerId);
-  } catch {
-    // Pointer-Capture ist eine zusätzliche Absicherung; globale Listener bleiben aktiv.
-  }
   dragSession = {
     pointerId: event.pointerId,
     pointerType: event.pointerType,
@@ -1404,6 +1399,11 @@ function beginPotentialDrag(event, pieceId, source, sourceCellIndex = null) {
 
 function activateDrag(event) {
   if (!dragSession || dragSession.active || state.inputLocked) return;
+  try {
+    dragSession.captureTarget?.setPointerCapture?.(dragSession.pointerId);
+  } catch {
+    // Pointer-Capture ist eine zusätzliche Absicherung; globale Listener bleiben aktiv.
+  }
   const originalPlacement = state.placed.get(dragSession.pieceId);
   if (dragSession.source === "board" && originalPlacement) {
     const boardRow = Math.floor(dragSession.sourceCellIndex / state.model.cols);

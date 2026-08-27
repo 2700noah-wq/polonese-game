@@ -11,7 +11,8 @@ test("jeder Drag-Abschluss entfernt Ghost, Vorschau, Body-Zustand und Pointer-Ca
     game,
     /function clearDragSession[\s\S]*dragSession = null;[\s\S]*releaseDragPointer\(session\);[\s\S]*removeAllDragGhosts\(\);[\s\S]*state\.preview = null;/,
   );
-  assert.match(game, /captureTarget\?\.setPointerCapture\?\.\(event\.pointerId\)/);
+  assert.match(game, /function activateDrag[\s\S]*dragSession\.captureTarget\?\.setPointerCapture\?\.\(dragSession\.pointerId\)/);
+  assert.doesNotMatch(game, /function beginPotentialDrag(?:(?!function activateDrag)[\s\S])*captureTarget\?\.setPointerCapture/);
   assert.match(game, /target\.releasePointerCapture\(session\.pointerId\)/);
   assert.match(game, /function finishDrag[\s\S]*clearDragSession\(\);/);
   assert.match(game, /function cancelSelection[\s\S]*clearDragSession\(\);/);
