@@ -993,8 +993,7 @@ async function animateAbsoluteHit() {
   setBoardMessage(`Treffer ${state.boss.hits} von ${ABSOLUTE_HITS_TO_WIN}! Der Boss wird wütender.`);
   await wait(520);
   hideBossArena();
-  await wait(900);
-  await runAbsoluteAttack({ alreadyLocked: true });
+  setInputLocked(false);
 }
 
 async function runAbsoluteAttack({ alreadyLocked = false } = {}) {

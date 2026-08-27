@@ -110,6 +110,10 @@ test("Absolut nutzt eigene 2-1-0-Phasen und einen getrennten Miss-Wiederholungsw
   assert.match(bossEngine, /ABSOLUTE_REMAINING_TRIGGERS = \[2, 1, 0\]/);
   assert.match(bossEngine, /function shouldStartAbsoluteRetry/);
   assert.match(game, /shouldStartAbsoluteAttack\([\s\S]*shouldStartAbsoluteRetry/);
+  const hitFlow = game.match(/async function animateAbsoluteHit\(\) \{[\s\S]*?\n\}\n\nasync function runAbsoluteAttack/)?.[0] ?? "";
+  assert.ok(hitFlow);
+  assert.doesNotMatch(hitFlow, /runAbsoluteAttack\(\{ alreadyLocked/);
+  assert.match(hitFlow, /hideBossArena\(\);\s*setInputLocked\(false\);/);
 });
 
 test("isolierte 390-Pixel-Testansicht ist vorhanden", () => {
