@@ -15,7 +15,7 @@ import {
   runTheftPrelude,
   theftEffectBounds,
   theftPresentationFor,
-} from "./boss-animation.js?v=20260827-theft-2";
+} from "./boss-animation.js?v=20260827-mobile-drag-absolute-1";
 import { createPuzzleModel } from "./puzzle-model.js?v=20260824-secret-1";
 import { sanitizeStats } from "./game-storage.js?v=20260826-boss-phases-1";
 import {
@@ -48,6 +48,8 @@ const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
 const DRAG_THRESHOLD = 8;
 const TOUCH_PREVIEW_LIFT = 64;
 const ABSOLUTE_POSITIONS = ["left", "right", "top"];
+const ABSOLUTE_HIT_DURATIONS = Object.freeze([0, 1100, 1280, 1480]);
+const ABSOLUTE_DEATH_DURATION = 4300;
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const elements = {
@@ -166,6 +168,64 @@ let bossHitTimeoutId = null;
 let activeTheftPortal = null;
 let activeTheftParticles = null;
 
+function removeAllDragGhosts({ clearBodyState = true } = {}) {
+  dragGhost?.remove();
+  document.querySelectorAll(".drag-ghost").forEach((ghost) => ghost.remove());
+  dragGhost = null;
+  if (clearBodyState) elements.body.classList.remove("dragging-piece");
+}
+
+function releaseDragPointer(session) {
+  const target = session?.captureTarget;
+  if (!target?.releasePointerCapture) return;
+  try {
+    if (!target.hasPointerCapture || target.hasPointerCapture(session.pointerId)) {
+      target.releasePointerCapture(session.pointerId);
+    }
+  } catch {
+    // Der Browser kann die Capture bei pointercancel bereits selbst freigegeben haben.
+  }
+}
+
+function clearDragSession({ clearPreview = true } = {}) {
+  const session = dragSession;
+  dragSession = null;
+  releaseDragPointer(session);
+  removeAllDragGhosts();
+  if (clearPreview) state.preview = null;
+  return session;
+}
+
+function abortDragSession({
+  message = "Drag abgebrochen. Der Stein bleibt ausgewählt.",
+  restorePickedUp = true,
+} = {}) {
+  const session = clearDragSession();
+  if (!session) return false;
+  if (!session.active) return true;
+
+  suppressClickUntil = performance.now() + 400;
+  if (restorePickedUp && state.pickedUpPieceId === state.selectedPieceId) {
+    cancelSelection({ restorePickedUp: true });
+    return true;
+  }
+
+  setBoardMessage(message);
+  renderBoard();
+  renderTray();
+  renderStatus();
+  return true;
+}
+
+function refreshActiveDrag() {
+  if (!dragSession?.active || dragSession.pieceId !== state.selectedPieceId) return;
+  createDragGhost(dragSession.pieceId, dragSession.pointerAnchor);
+  updateActiveDrag({
+    clientX: dragSession.lastX,
+    clientY: dragSession.lastY,
+  }, { allowScroll: false });
+}
+
 function saveStats() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
 }
@@ -244,6 +304,7 @@ function setBoardMessage(message, isError = false) {
 }
 
 function resetInteractionState() {
+  clearDragSession({ clearPreview: false });
   state.solved = false;
   state.placed.clear();
   state.selectedPieceId = null;
@@ -253,9 +314,6 @@ function resetInteractionState() {
   state.preview = null;
   state.pickedUpPieceId = null;
   state.inputLocked = false;
-  dragSession = null;
-  dragGhost?.remove();
-  dragGhost = null;
   elements.body.classList.remove("dragging-piece", "boss-sequence-active");
   clearTheftEffects();
   hideBossArena();
@@ -478,6 +536,7 @@ function placeSelected(cellIndex) {
 }
 
 function cancelSelection({ restorePickedUp = true } = {}) {
+  clearDragSession();
   if (!state.selectedPieceId || state.inputLocked) return;
   if (restorePickedUp && state.pickedUpPieceId === state.selectedPieceId && state.history.length) {
     restorePlacements(state.history.pop());
@@ -503,6 +562,7 @@ function rotateSelected() {
   invalidatePendingMutation();
   renderBoard();
   renderTray();
+  refreshActiveDrag();
 }
 
 function flipSelected() {
@@ -512,6 +572,7 @@ function flipSelected() {
   invalidatePendingMutation();
   renderBoard();
   renderTray();
+  refreshActiveDrag();
 }
 
 function undo() {
@@ -906,19 +967,22 @@ function waitForBossHit(milliseconds) {
 
 async function animateAbsoluteHit() {
   const nextHit = state.boss.hits + 1;
+  const hitClass = `hit-${nextHit}`;
   elements.bossArena.classList.remove("searching", "targeting", "target-locked", "blink-confirm", "grinning");
-  elements.bossArena.classList.add("hit");
+  elements.bossArena.classList.remove("hit-1", "hit-2", "hit-3", "portal-unstable");
+  elements.bossArena.classList.add("hit", hitClass);
   if (nextHit === 1) elements.bossArena.classList.add("crown-fly");
-  await wait(nextHit === 1 ? 950 : 680);
+  if (nextHit === 3) elements.bossArena.classList.add("portal-unstable");
+  await wait(ABSOLUTE_HIT_DURATIONS[nextHit]);
   recordAbsoluteHit(state.boss);
   elements.bossArena.dataset.damage = String(state.boss.hits);
   renderStatus();
-  elements.bossArena.classList.remove("hit", "crown-fly");
+  elements.bossArena.classList.remove("hit", "crown-fly", hitClass);
 
   if (state.boss.dead) {
-    elements.bossArena.classList.add("dying");
+    elements.bossArena.classList.add("dying", "portal-unstable");
     setBoardMessage("Der Endboss zerbricht …");
-    await wait(3100);
+    await wait(ABSOLUTE_DEATH_DURATION);
     hideBossArena();
     setInputLocked(false);
     setBoardMessage("Absolut ist besiegt. Fülle jetzt das aktuelle Spielfeld vollständig.");
@@ -1275,7 +1339,7 @@ function boardPointFromPointer(clientX, clientY, pointerType) {
 }
 
 function createDragGhost(pieceId, pointerAnchor) {
-  dragGhost?.remove();
+  removeAllDragGhosts({ clearBodyState: false });
   const variant = selectedVariant();
   if (!variant) return;
   const boardCell = elements.gameBoard.querySelector(".board-cell:not(.board-void)");
@@ -1311,7 +1375,17 @@ function moveDragGhost(clientX, clientY, pointerType) {
 }
 
 function beginPotentialDrag(event, pieceId, source, sourceCellIndex = null) {
-  if (interactionBlocked() || dragSession || (event.pointerType === "mouse" && event.button !== 0)) return;
+  if (interactionBlocked() || (event.pointerType === "mouse" && event.button !== 0)) return;
+  if (dragSession) {
+    if (dragSession.active || dragSession.pointerId === event.pointerId) return;
+    clearDragSession();
+  }
+  const captureTarget = event.currentTarget;
+  try {
+    captureTarget?.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Pointer-Capture ist eine zusätzliche Absicherung; globale Listener bleiben aktiv.
+  }
   dragSession = {
     pointerId: event.pointerId,
     pointerType: event.pointerType,
@@ -1320,8 +1394,11 @@ function beginPotentialDrag(event, pieceId, source, sourceCellIndex = null) {
     sourceCellIndex,
     startX: event.clientX,
     startY: event.clientY,
+    lastX: event.clientX,
+    lastY: event.clientY,
     active: false,
     pointerAnchor: null,
+    captureTarget,
   };
 }
 
@@ -1344,13 +1421,17 @@ function activateDrag(event) {
   const variant = selectedVariant();
   dragSession.pointerAnchor ??= pointerAnchorForPlacement(variant.cells);
   dragSession.active = true;
+  dragSession.lastX = event.clientX;
+  dragSession.lastY = event.clientY;
   elements.body.classList.add("dragging-piece");
   createDragGhost(dragSession.pieceId, dragSession.pointerAnchor);
   moveDragGhost(event.clientX, event.clientY, dragSession.pointerType);
 }
 
-function updateActiveDrag(event) {
+function updateActiveDrag(event, { allowScroll = true } = {}) {
   if (!dragSession?.active || state.inputLocked) return;
+  dragSession.lastX = event.clientX;
+  dragSession.lastY = event.clientY;
   moveDragGhost(event.clientX, event.clientY, dragSession.pointerType);
   const point = boardPointFromPointer(event.clientX, event.clientY, dragSession.pointerType);
   const placement = point === null ? null : {
@@ -1363,7 +1444,7 @@ function updateActiveDrag(event) {
     state.preview = placement ? { key, placement } : null;
     renderBoard();
   }
-  if (dragSession.pointerType === "touch") {
+  if (allowScroll && dragSession.pointerType === "touch") {
     const edge = 54;
     if (event.clientY < edge) window.scrollBy(0, -12);
     if (event.clientY > window.innerHeight - edge) window.scrollBy(0, 12);
@@ -1373,22 +1454,18 @@ function updateActiveDrag(event) {
 function finishDrag(event, cancelled = false) {
   if (!dragSession || event.pointerId !== dragSession.pointerId) return;
   if (!dragSession.active) {
-    dragSession = null;
+    clearDragSession();
     return;
   }
   if (!cancelled) updateActiveDrag(event);
   const candidate = !cancelled ? state.preview?.placement : null;
   const validation = candidate ? validateCandidate(candidate) : { valid: false, reason: "Ziehe den Stein vollständig auf das Spielfeld." };
-  dragGhost?.remove();
-  dragGhost = null;
-  elements.body.classList.remove("dragging-piece");
+  clearDragSession();
   suppressClickUntil = performance.now() + 400;
-  dragSession = null;
   if (validation.valid) {
     placeCandidate(candidate);
     return;
   }
-  state.preview = null;
   if (state.pickedUpPieceId === state.selectedPieceId) {
     cancelSelection({ restorePickedUp: true });
   } else {
@@ -1470,6 +1547,17 @@ window.addEventListener("pointermove", (event) => {
 
 window.addEventListener("pointerup", (event) => finishDrag(event));
 window.addEventListener("pointercancel", (event) => finishDrag(event, true));
+window.addEventListener("lostpointercapture", (event) => {
+  if (dragSession && event.pointerId === dragSession.pointerId) abortDragSession();
+});
+window.addEventListener("touchcancel", () => {
+  if (dragSession?.pointerType === "touch") abortDragSession();
+}, { passive: true });
+window.addEventListener("blur", () => abortDragSession());
+window.addEventListener("pagehide", () => clearDragSession());
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) abortDragSession();
+});
 
 elements.pieceTray.addEventListener("click", (event) => {
   if (performance.now() < suppressClickUntil) return;

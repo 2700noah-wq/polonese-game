@@ -1550,6 +1550,7 @@ body.dragging-piece .board-wrap {
 .boss-arena {
   --boss-color: #d86b78;
   --boss-accent: #ffd7dc;
+  --impact-travel: 58px;
   position: absolute;
   inset: 54px 12px 50px;
   z-index: 80;
@@ -1628,6 +1629,58 @@ body.dragging-piece .board-wrap {
   transform: scaleX(0.9);
 }
 
+.boss-impact {
+  position: absolute;
+  top: -7px;
+  left: -9px;
+  z-index: 12;
+  width: 150px;
+  height: 150px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.boss-impact::before,
+.boss-impact::after {
+  content: "";
+  position: absolute;
+  inset: 21px;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.boss-impact::before {
+  border: 5px solid rgba(255, 33, 72, 0.88);
+  box-shadow: 0 0 20px rgba(255, 0, 52, 0.95), inset 0 0 16px rgba(255, 87, 115, 0.72);
+}
+
+.boss-impact::after {
+  background: radial-gradient(circle, rgba(255, 235, 238, 0.98) 0 5%, rgba(255, 21, 65, 0.82) 18%, transparent 62%);
+}
+
+.boss-impact i {
+  --impact-angle: 0deg;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 22px;
+  border-radius: 999px;
+  background: linear-gradient(#fff4f5, #ff183f 38%, rgba(139, 0, 36, 0));
+  box-shadow: 0 0 9px rgba(255, 0, 45, 0.9);
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(var(--impact-angle)) translateY(-24px) scaleY(0.2);
+}
+
+.boss-impact i:nth-child(1) { --impact-angle: 0deg; }
+.boss-impact i:nth-child(2) { --impact-angle: 45deg; }
+.boss-impact i:nth-child(3) { --impact-angle: 90deg; }
+.boss-impact i:nth-child(4) { --impact-angle: 135deg; }
+.boss-impact i:nth-child(5) { --impact-angle: 180deg; }
+.boss-impact i:nth-child(6) { --impact-angle: 225deg; }
+.boss-impact i:nth-child(7) { --impact-angle: 270deg; }
+.boss-impact i:nth-child(8) { --impact-angle: 315deg; }
+
 .boss-body {
   position: absolute;
   top: 33px;
@@ -1657,6 +1710,19 @@ body.dragging-piece .board-wrap {
 
 .horn-left { left: -7px; transform: rotate(-22deg) scale(var(--horn-scale, 0.72)); }
 .horn-right { right: -7px; transform: scaleX(-1) rotate(-22deg) scale(var(--horn-scale, 0.72)); }
+
+.boss-horn-fragment {
+  position: absolute;
+  top: 16px;
+  right: -2px;
+  z-index: 8;
+  width: 22px;
+  height: 25px;
+  background: linear-gradient(135deg, #f4ece6, #a88d8b 68%, #51363d);
+  clip-path: polygon(12% 8%, 82% 0, 100% 72%, 42% 100%, 0 55%);
+  opacity: 0;
+  pointer-events: none;
+}
 
 .boss-crown {
   position: absolute;
@@ -1757,6 +1823,53 @@ body.dragging-piece .board-wrap {
 .crack-two { right: 23px; bottom: 11px; transform: rotate(-27deg); }
 .crack-three { bottom: 5px; left: 23px; transform: rotate(32deg); }
 
+.boss-energy {
+  position: absolute;
+  top: 33px;
+  left: 14px;
+  z-index: 9;
+  width: 104px;
+  height: 104px;
+  overflow: visible;
+  border-radius: 23px 23px 29px 29px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.boss-energy::before,
+.boss-energy::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: inherit;
+  opacity: 0;
+}
+
+.boss-energy::before {
+  border: 3px solid rgba(255, 31, 73, 0.88);
+  box-shadow: 0 0 23px rgba(255, 0, 46, 0.92), inset 0 0 22px rgba(255, 30, 72, 0.64);
+}
+
+.boss-energy::after {
+  inset: 5px;
+  background: radial-gradient(circle at 50% 42%, rgba(255, 225, 230, 0.68), rgba(255, 0, 47, 0.2) 30%, transparent 72%);
+}
+
+.boss-energy i {
+  position: absolute;
+  width: 3px;
+  height: 58px;
+  border-radius: 999px;
+  background: linear-gradient(transparent, #fff3f4 24%, #ff1747 48%, transparent 92%);
+  filter: drop-shadow(0 0 5px #ff003d);
+  opacity: 0;
+}
+
+.boss-energy i:nth-child(1) { top: -15px; left: 24px; transform: rotate(31deg); }
+.boss-energy i:nth-child(2) { top: 5px; right: 17px; transform: rotate(-25deg); }
+.boss-energy i:nth-child(3) { bottom: -17px; left: 43px; transform: rotate(12deg); }
+.boss-energy i:nth-child(4) { top: 28px; left: -8px; transform: rotate(-42deg); }
+
 .boss-arena[data-damage="1"] .crack-one,
 .boss-arena[data-damage="2"] .crack-one,
 .boss-arena[data-damage="2"] .crack-two,
@@ -1832,8 +1945,56 @@ body.dragging-piece .board-wrap {
 .boss-arena.grinning .boss-mouth { animation: boss-grin 500ms ease forwards; }
 .boss-arena.targeting:not(.target-locked) .boss-eye i { animation: boss-look 480ms ease-in-out infinite alternate; }
 .boss-arena.stealing .boss-creature { animation: boss-snatch var(--boss-snatch-duration, 300ms) cubic-bezier(0.2, 0.8, 0.2, 1); }
-.boss-arena.hit .boss-creature { animation: boss-hit 620ms ease; }
-.boss-arena.crown-fly .boss-crown { display: block; animation: crown-fly 950ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+.boss-arena.hit-1 { --absolute-hit-duration: 1100ms; --impact-travel: 58px; }
+.boss-arena.hit-2 { --absolute-hit-duration: 1280ms; --impact-travel: 70px; }
+.boss-arena.hit-3 { --absolute-hit-duration: 1480ms; --impact-travel: 84px; }
+
+.boss-arena.hit-1 .boss-creature { animation: absolute-hit-one 1100ms cubic-bezier(0.16, 0.8, 0.24, 1) both; }
+.boss-arena.hit-2 .boss-creature { animation: absolute-hit-two 1280ms cubic-bezier(0.14, 0.76, 0.2, 1) both; }
+.boss-arena.hit-3 .boss-creature { animation: absolute-hit-three 1480ms cubic-bezier(0.12, 0.78, 0.18, 1) both; }
+.boss-arena.crown-fly .boss-crown { display: block; animation: crown-fly 1100ms cubic-bezier(0.12, 0.72, 0.16, 1) forwards; }
+
+.boss-arena.hit .boss-impact {
+  opacity: 1;
+}
+
+.boss-arena.hit .boss-impact::before {
+  animation: absolute-impact-ring var(--absolute-hit-duration) cubic-bezier(0.08, 0.78, 0.18, 1) both;
+}
+
+.boss-arena.hit .boss-impact::after {
+  animation: absolute-impact-flash var(--absolute-hit-duration) ease-out both;
+}
+
+.boss-arena.hit .boss-impact i {
+  animation: absolute-impact-spark var(--absolute-hit-duration) ease-out both;
+}
+
+.boss-arena.hit .boss-energy {
+  animation: absolute-energy-burst var(--absolute-hit-duration) steps(2, end) both;
+}
+
+.boss-arena.hit .boss-energy::before,
+.boss-arena.hit .boss-energy::after,
+.boss-arena.hit .boss-energy i {
+  animation: absolute-energy-vein var(--absolute-hit-duration) ease-out both;
+}
+
+.boss-arena.hit .boss-crack {
+  transform-origin: top center;
+  animation: absolute-crack-spread var(--absolute-hit-duration) cubic-bezier(0.18, 0.78, 0.18, 1) both;
+}
+
+.boss-arena.hit-1 .crack-one,
+.boss-arena.hit-2 .crack-one,
+.boss-arena.hit-2 .crack-two,
+.boss-arena.hit-3 .boss-crack {
+  display: block;
+}
+
+.boss-arena.hit-2 .boss-horn-fragment {
+  animation: absolute-horn-break 1180ms 90ms cubic-bezier(0.15, 0.72, 0.24, 1) both;
+}
 
 .boss-debris {
   position: absolute;
@@ -1850,32 +2011,85 @@ body.dragging-piece .board-wrap {
   opacity: 0;
 }
 
+.boss-arena.hit-2 .boss-debris i:nth-child(-n + 4),
+.boss-arena.hit-3 .boss-debris i {
+  animation: absolute-impact-debris var(--absolute-hit-duration) var(--impact-delay, 0ms) cubic-bezier(0.1, 0.72, 0.2, 1) both;
+}
+
+.boss-arena.dying .boss-creature {
+  animation: absolute-death-stagger 4.3s cubic-bezier(0.2, 0.72, 0.2, 1) both;
+}
+
 .boss-arena.dying .boss-body {
-  animation: boss-crumble 2.7s cubic-bezier(0.35, 0.05, 0.3, 1) forwards;
+  animation: boss-crumble 4.15s cubic-bezier(0.28, 0.04, 0.24, 1) forwards;
 }
 
 .boss-arena.dying .boss-eye {
-  animation: eyes-last 2.7s ease forwards;
+  animation: eyes-last 4.15s steps(2, end) forwards;
 }
 
-.boss-arena.dying .boss-horn,
+.boss-arena.dying .boss-eye i {
+  animation: absolute-eye-overload 4.15s ease-out forwards;
+}
+
+.boss-arena.dying .boss-crack {
+  display: block;
+  animation: absolute-death-cracks 2.1s ease-out both;
+}
+
+.boss-arena.dying .boss-energy {
+  animation: absolute-death-energy 4.15s steps(2, end) both;
+}
+
+.boss-arena.dying .boss-energy::before,
+.boss-arena.dying .boss-energy::after,
+.boss-arena.dying .boss-energy i {
+  animation: absolute-death-veins 4.15s ease-out both;
+}
+
+.boss-arena.dying .boss-impact {
+  opacity: 1;
+}
+
+.boss-arena.dying .boss-impact::before {
+  animation: absolute-death-wave 4.15s ease-out both;
+}
+
+.boss-arena.dying .boss-horn.horn-left {
+  animation: body-fall-left 2.45s 820ms ease-in forwards;
+}
+
+.boss-arena.dying .boss-horn.horn-right,
 .boss-arena.dying .boss-crown {
-  animation: body-fall 2.2s 500ms ease-in forwards;
+  animation: body-fall-right 2.25s 620ms ease-in forwards;
 }
 
 .boss-arena.dying .boss-debris i {
-  animation: debris-fall 1.8s var(--delay, 0ms) ease-in forwards;
+  animation: debris-fall 2.2s var(--delay, 0ms) cubic-bezier(0.22, 0.58, 0.3, 1) forwards;
 }
 
-.boss-debris i:nth-child(1) { left: 8%; top: 20%; --delay: 350ms; }
-.boss-debris i:nth-child(2) { left: 28%; top: 5%; --delay: 580ms; }
-.boss-debris i:nth-child(3) { right: 28%; top: 24%; --delay: 760ms; }
-.boss-debris i:nth-child(4) { right: 5%; top: 8%; --delay: 900ms; }
-.boss-debris i:nth-child(5) { left: 42%; top: 45%; --delay: 1120ms; }
-.boss-debris i:nth-child(6) { right: 18%; top: 55%; --delay: 1380ms; }
+.boss-debris i:nth-child(1) { left: 8%; top: 20%; --delay: 420ms; --impact-delay: 90ms; --debris-x: -58px; }
+.boss-debris i:nth-child(2) { left: 28%; top: 5%; --delay: 650ms; --impact-delay: 150ms; --debris-x: 42px; }
+.boss-debris i:nth-child(3) { right: 28%; top: 24%; --delay: 820ms; --impact-delay: 220ms; --debris-x: -34px; }
+.boss-debris i:nth-child(4) { right: 5%; top: 8%; --delay: 980ms; --impact-delay: 280ms; --debris-x: 65px; }
+.boss-debris i:nth-child(5) { left: 42%; top: 45%; --delay: 1160ms; --impact-delay: 330ms; --debris-x: -48px; }
+.boss-debris i:nth-child(6) { right: 18%; top: 55%; --delay: 1340ms; --impact-delay: 380ms; --debris-x: 51px; }
+.boss-debris i:nth-child(7) { left: 17%; top: 61%; --delay: 1510ms; --impact-delay: 430ms; --debris-x: -70px; width: 11px; height: 11px; }
+.boss-debris i:nth-child(8) { right: 35%; top: 68%; --delay: 1670ms; --impact-delay: 480ms; --debris-x: 36px; width: 9px; height: 9px; }
+.boss-debris i:nth-child(9) { left: 52%; top: 12%; --delay: 1840ms; --impact-delay: 530ms; --debris-x: -29px; width: 12px; height: 12px; }
+.boss-debris i:nth-child(10) { right: 8%; top: 48%; --delay: 2050ms; --impact-delay: 590ms; --debris-x: 74px; width: 8px; height: 8px; }
 
 .boss-arena.dying .boss-portal {
-  animation: portal-collapse 2.5s 350ms ease-in forwards;
+  animation: portal-collapse 4.05s 120ms cubic-bezier(0.2, 0.62, 0.18, 1) forwards;
+}
+
+.boss-arena.portal-open.portal-unstable:not(.dying) .boss-portal {
+  animation: absolute-portal-instability 220ms steps(2, end) infinite;
+}
+
+.boss-arena.portal-unstable .boss-portal i {
+  animation-duration: 360ms;
+  filter: drop-shadow(0 0 8px rgba(255, 0, 63, 0.95));
 }
 
 body.boss-sequence-active .piece-tray,
@@ -1927,16 +2141,100 @@ body.boss-sequence-active .mobile-action-bar {
   66% { translate: 0 30px; rotate: -5deg; }
 }
 
-@keyframes boss-hit {
-  0%, 100% { translate: 0 0; filter: brightness(1); }
-  18% { translate: -16px -5px; rotate: -9deg; filter: brightness(2); }
-  38% { translate: 12px 4px; rotate: 7deg; }
-  58% { translate: -8px 0; rotate: -4deg; }
+@keyframes absolute-hit-one {
+  0%, 100% { translate: 0 0; rotate: 0deg; filter: brightness(1); }
+  9% { translate: -6px -3px; rotate: -4deg; filter: brightness(2.8) saturate(1.45); }
+  20% { translate: -25px -13px; rotate: -14deg; filter: brightness(1.5); }
+  35% { translate: 14px 7px; rotate: 8deg; }
+  52% { translate: -9px -2px; rotate: -5deg; }
+  68% { translate: 5px 1px; rotate: 2.5deg; }
+}
+
+@keyframes absolute-hit-two {
+  0%, 100% { translate: 0 0; rotate: 0deg; filter: brightness(1); }
+  7% { translate: -8px -5px; rotate: -6deg; filter: brightness(3.1) saturate(1.65); }
+  17% { translate: -34px -19px; rotate: -19deg; filter: brightness(1.65); }
+  29% { translate: 22px 10px; rotate: 12deg; }
+  42% { translate: -18px -6px; rotate: -10deg; }
+  54% { translate: 13px 5px; rotate: 7deg; filter: brightness(1.35); }
+  68% { translate: -8px -2px; rotate: -4deg; }
+  82% { translate: 4px 0; rotate: 2deg; }
+}
+
+@keyframes absolute-hit-three {
+  0%, 100% { translate: 0 0; rotate: 0deg; filter: brightness(1); }
+  5% { translate: -10px -7px; rotate: -8deg; filter: brightness(3.7) saturate(1.9); }
+  14% { translate: -45px -27px; rotate: -24deg; filter: brightness(1.8); }
+  25% { translate: 28px 14px; rotate: 16deg; }
+  36% { translate: -23px -9px; rotate: -13deg; }
+  47% { translate: 17px 7px; rotate: 9deg; filter: brightness(1.6); }
+  58% { translate: -13px -4px; rotate: -7deg; }
+  69% { translate: 9px 2px; rotate: 5deg; filter: brightness(1.35); }
+  82% { translate: -5px 0; rotate: -3deg; }
+}
+
+@keyframes absolute-impact-ring {
+  0% { opacity: 0; transform: scale(0.18); }
+  7% { opacity: 1; transform: scale(0.48); }
+  26% { opacity: 0.86; transform: scale(1.16); }
+  52%, 100% { opacity: 0; transform: scale(1.72); }
+}
+
+@keyframes absolute-impact-flash {
+  0% { opacity: 0; transform: scale(0.2); }
+  5% { opacity: 1; transform: scale(0.55); }
+  18% { opacity: 0.72; transform: scale(1.05); }
+  42%, 100% { opacity: 0; transform: scale(1.42); }
+}
+
+@keyframes absolute-impact-spark {
+  0%, 3% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--impact-angle)) translateY(-20px) scaleY(0.2); }
+  8% { opacity: 1; }
+  30% { opacity: 0.92; transform: translate(-50%, -50%) rotate(var(--impact-angle)) translateY(calc(0px - var(--impact-travel))) scaleY(1); }
+  52%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--impact-angle)) translateY(calc(-20px - var(--impact-travel))) scaleY(0.35); }
+}
+
+@keyframes absolute-energy-burst {
+  0%, 4% { opacity: 0; }
+  8%, 18% { opacity: 1; }
+  23% { opacity: 0.35; }
+  30% { opacity: 0.92; }
+  58%, 100% { opacity: 0; }
+}
+
+@keyframes absolute-energy-vein {
+  0%, 4% { opacity: 0; filter: brightness(1); }
+  10% { opacity: 1; filter: brightness(2.2); }
+  32% { opacity: 0.82; }
+  62%, 100% { opacity: 0; filter: brightness(1); }
+}
+
+@keyframes absolute-crack-spread {
+  0%, 5% { opacity: 0; scale: 1 0.05; filter: drop-shadow(0 0 0 rgba(255, 0, 49, 0)); }
+  20% { opacity: 1; scale: 1 1; filter: drop-shadow(0 0 7px rgba(255, 0, 49, 0.95)); }
+  48% { filter: drop-shadow(0 0 3px rgba(255, 0, 49, 0.5)); }
+  100% { opacity: 1; scale: 1 1; filter: none; }
+}
+
+@keyframes absolute-horn-break {
+  0%, 8% { opacity: 0; transform: translate(0, 0) rotate(0deg) scale(0.5); }
+  14% { opacity: 1; transform: translate(4px, -5px) rotate(24deg) scale(1); }
+  55% { opacity: 1; transform: translate(50px, 45px) rotate(210deg) scale(0.86); }
+  100% { opacity: 0; transform: translate(82px, 142px) rotate(510deg) scale(0.55); }
+}
+
+@keyframes absolute-impact-debris {
+  0%, 4% { opacity: 0; transform: translate(0, 0) rotate(0deg) scale(0.4); }
+  10% { opacity: 1; }
+  54% { opacity: 0.95; transform: translate(var(--debris-x, 38px), -34px) rotate(170deg) scale(0.9); }
+  100% { opacity: 0; transform: translate(var(--debris-x, 38px), 98px) rotate(430deg) scale(0.5); }
 }
 
 @keyframes crown-fly {
   0% { opacity: 1; transform: translateX(-50%) scale(var(--crown-scale, 1)); }
-  100% { opacity: 0; transform: translate(145px, -140px) rotate(430deg) scale(0.55); }
+  14% { opacity: 1; transform: translate(-75%, -34px) rotate(-25deg) scale(var(--crown-scale, 1)); }
+  56% { opacity: 1; transform: translate(115px, -126px) rotate(310deg) scale(0.84); }
+  100% { opacity: 0; transform: translate(185px, -178px) rotate(650deg) scale(0.38); }
 }
 
 @keyframes portal-open {
@@ -1948,32 +2246,114 @@ body.boss-sequence-active .mobile-action-bar {
   to { rotate: 360deg; }
 }
 
+@keyframes absolute-death-stagger {
+  0%, 100% { translate: 0 0; rotate: 0deg; filter: brightness(1); }
+  4% { translate: -8px -3px; rotate: -5deg; filter: brightness(2.2) saturate(1.5); }
+  8% { translate: 9px 2px; rotate: 5deg; }
+  13% { translate: -7px 1px; rotate: -4deg; }
+  18% { translate: 8px -2px; rotate: 4deg; filter: brightness(1.5); }
+  25% { translate: -5px 0; rotate: -3deg; }
+  34% { translate: 6px 2px; rotate: 3deg; filter: brightness(1.25); }
+  46% { translate: -4px 1px; rotate: -2deg; }
+  58% { translate: 3px 0; rotate: 2deg; }
+  72% { translate: -2px 1px; rotate: -1deg; }
+}
+
 @keyframes boss-crumble {
-  0%, 16% { opacity: 1; transform: scale(1); filter: brightness(1); }
-  36% { transform: scale(1.02); filter: brightness(1.7); }
-  64% { opacity: 0.92; transform: skewX(-5deg) scaleY(0.9); clip-path: polygon(0 0, 100% 0, 94% 58%, 78% 53%, 70% 100%, 43% 88%, 21% 100%, 0 70%); }
-  100% { opacity: 0; transform: translateY(150px) scaleY(0.22) rotate(8deg); clip-path: polygon(7% 62%, 24% 30%, 37% 82%, 49% 15%, 61% 88%, 76% 28%, 94% 74%); }
+  0%, 12% { opacity: 1; transform: scale(1); filter: brightness(1); clip-path: inset(0 round 24px); }
+  18% { transform: scale(1.04); filter: brightness(2.2) saturate(1.8); }
+  29% { transform: skewX(-2deg) scale(1.01); filter: brightness(1.28); clip-path: polygon(0 0, 100% 0, 100% 46%, 91% 53%, 100% 67%, 100% 100%, 0 100%, 0 72%, 9% 62%, 0 49%); }
+  43% { opacity: 1; transform: skewX(3deg) scaleY(0.96); clip-path: polygon(0 0, 42% 0, 48% 7%, 58% 0, 100% 0, 100% 42%, 89% 52%, 100% 65%, 100% 100%, 68% 100%, 60% 89%, 49% 100%, 25% 100%, 17% 87%, 0 100%); }
+  58% { opacity: 0.96; transform: translateY(5px) skewX(-5deg) scaleY(0.88); filter: brightness(1.4); clip-path: polygon(0 0, 38% 0, 48% 11%, 60% 0, 100% 0, 92% 39%, 100% 51%, 84% 62%, 94% 100%, 68% 90%, 58% 100%, 42% 87%, 22% 100%, 13% 75%, 0 66%); }
+  72% { opacity: 0.82; transform: translateY(26px) skewX(6deg) scaleY(0.65); filter: brightness(0.82) saturate(1.5); clip-path: polygon(5% 12%, 31% 0, 47% 20%, 62% 2%, 94% 14%, 83% 45%, 100% 61%, 74% 70%, 83% 100%, 54% 84%, 33% 100%, 22% 72%, 0 59%); }
+  86% { opacity: 0.38; transform: translateY(84px) scaleX(0.72) scaleY(0.35) rotate(5deg); filter: brightness(0.42); }
+  100% { opacity: 0; transform: translateY(170px) scaleX(0.42) scaleY(0.08) rotate(12deg); filter: brightness(0.18); clip-path: polygon(8% 55%, 29% 19%, 43% 70%, 57% 7%, 70% 76%, 93% 37%, 82% 100%, 19% 100%); }
 }
 
 @keyframes eyes-last {
-  0%, 70% { opacity: 1; }
-  88%, 100% { opacity: 0; transform: translateY(36px) rotate(12deg); }
+  0%, 70% { opacity: 1; filter: brightness(1); }
+  72%, 75%, 79% { opacity: 0.35; filter: brightness(2.4); }
+  73.5%, 77%, 82% { opacity: 1; filter: brightness(1.7); }
+  88% { opacity: 0.75; transform: translateY(8px); filter: brightness(0.7); }
+  94%, 100% { opacity: 0; transform: translateY(42px) rotate(14deg); filter: brightness(0); }
 }
 
-@keyframes body-fall {
-  to { opacity: 0; transform: translateY(150px) rotate(80deg); }
+@keyframes absolute-eye-overload {
+  0%, 64% { background: #ef0033; box-shadow: 0 0 9px rgba(255, 0, 48, 0.7); }
+  70% { background: #fff; box-shadow: 0 0 24px #ff1747; }
+  78% { background: #ff1647; box-shadow: 0 0 16px rgba(255, 0, 48, 0.95); }
+  88% { background: #4b0716; box-shadow: 0 0 4px rgba(255, 0, 48, 0.25); }
+  100% { background: #130207; box-shadow: none; }
+}
+
+@keyframes absolute-death-cracks {
+  0% { opacity: 0.45; scale: 1 0.15; filter: drop-shadow(0 0 2px rgba(255, 0, 50, 0.4)); }
+  28% { opacity: 1; scale: 1.25 1; filter: drop-shadow(0 0 9px rgba(255, 0, 50, 1)); }
+  62% { scale: 1.45 1.08; filter: drop-shadow(0 0 5px rgba(255, 45, 80, 0.82)); }
+  100% { opacity: 1; scale: 1.55 1.12; filter: drop-shadow(0 0 1px rgba(255, 0, 50, 0.3)); }
+}
+
+@keyframes absolute-death-energy {
+  0%, 7% { opacity: 0.4; }
+  10%, 18% { opacity: 1; }
+  22% { opacity: 0.28; }
+  28%, 41% { opacity: 0.92; }
+  48% { opacity: 0.22; }
+  56%, 68% { opacity: 0.88; }
+  78% { opacity: 0.3; }
+  88%, 100% { opacity: 0; }
+}
+
+@keyframes absolute-death-veins {
+  0% { opacity: 0.4; filter: brightness(1.2); }
+  18% { opacity: 1; filter: brightness(2.5); }
+  42% { opacity: 0.72; filter: brightness(1.6); }
+  68% { opacity: 1; filter: brightness(2.2); }
+  86%, 100% { opacity: 0; filter: brightness(0.6); }
+}
+
+@keyframes absolute-death-wave {
+  0% { opacity: 0; transform: scale(0.4); }
+  10% { opacity: 0.92; transform: scale(0.8); }
+  28% { opacity: 0; transform: scale(1.65); }
+  52% { opacity: 0; transform: scale(0.55); }
+  60% { opacity: 0.78; transform: scale(0.92); }
+  82%, 100% { opacity: 0; transform: scale(1.9); }
+}
+
+@keyframes body-fall-left {
+  0% { opacity: 1; translate: 0 0; rotate: 0deg; }
+  100% { opacity: 0; translate: -96px 175px; rotate: -310deg; }
+}
+
+@keyframes body-fall-right {
+  0% { opacity: 1; translate: 0 0; rotate: 0deg; }
+  100% { opacity: 0; translate: 108px 168px; rotate: 340deg; }
 }
 
 @keyframes debris-fall {
-  0% { opacity: 0; transform: translate(0, 0) rotate(0deg); }
-  12% { opacity: 1; }
-  100% { opacity: 0; transform: translate(var(--debris-x, 28px), 170px) rotate(280deg); }
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg) scale(0.4); }
+  10% { opacity: 1; }
+  42% { opacity: 1; transform: translate(var(--debris-x, 28px), -28px) rotate(145deg) scale(1); }
+  100% { opacity: 0; transform: translate(var(--debris-x, 28px), 190px) rotate(410deg) scale(0.55); }
+}
+
+@keyframes absolute-portal-instability {
+  0% { opacity: 0.78; transform: translate(-50%, -50%) scaleX(0.88) scaleY(1.08) rotate(-5deg); filter: brightness(0.85); }
+  50% { opacity: 1; transform: translate(-48%, -51%) scaleX(1.12) scaleY(0.91) rotate(7deg); filter: brightness(1.65); }
+  100% { opacity: 0.88; transform: translate(-52%, -49%) scaleX(0.94) scaleY(1.05) rotate(-9deg); filter: brightness(1.15); }
 }
 
 @keyframes portal-collapse {
-  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  65% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.3) rotate(170deg); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scaleX(0.03) scaleY(0.7) rotate(280deg); }
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); filter: brightness(1); }
+  12% { transform: translate(-48%, -52%) scaleX(1.12) scaleY(0.9) rotate(18deg); filter: brightness(1.7); }
+  24% { transform: translate(-52%, -48%) scaleX(0.88) scaleY(1.14) rotate(55deg); }
+  38% { opacity: 0.94; transform: translate(-49%, -51%) scale(1.04) rotate(105deg); filter: brightness(1.25); }
+  54% { opacity: 1; transform: translate(-50%, -50%) scale(0.68) rotate(185deg); filter: brightness(2); }
+  68% { opacity: 0.9; transform: translate(-50%, -50%) scaleX(0.18) scaleY(0.82) rotate(255deg); filter: brightness(1.35); }
+  82% { opacity: 0.68; transform: translate(-50%, -50%) scaleX(0.05) scaleY(1.1) rotate(320deg); }
+  92% { opacity: 1; transform: translate(-50%, -50%) scaleX(0.02) scaleY(0.54) rotate(390deg); filter: brightness(2.8); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.01) rotate(470deg); filter: brightness(0); }
 }
 
 .celebration {
@@ -2187,7 +2567,7 @@ body.boss-sequence-active .mobile-action-bar {
   .piece-card {
     min-height: 64px;
     padding: 2px;
-    touch-action: manipulation;
+    touch-action: none;
   }
 
   .mini-piece {
@@ -2245,6 +2625,12 @@ body.boss-sequence-active .mobile-action-bar {
   }
 
   .boss-body {
+    left: 12px;
+    width: 88px;
+    height: 88px;
+  }
+
+  .boss-energy {
     left: 12px;
     width: 88px;
     height: 88px;

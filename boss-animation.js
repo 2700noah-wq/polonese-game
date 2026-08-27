@@ -1,8 +1,8 @@
 const BASE_THEFT_TIMELINE = Object.freeze({
-  search: 350,
+  search: 420,
   lock: 350,
   wobble: 150,
-  suction: 300,
+  suction: 380,
   particles: 250,
 });
 

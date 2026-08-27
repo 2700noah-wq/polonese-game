@@ -68,10 +68,27 @@ test("Touchziel, mobile Bossansicht und Wiederfreigabe der Steuerung sind vorges
 test("Krone, Risse und langsame Zerfallsanimation sind im Bossaufbau enthalten", () => {
   assert.match(html, /boss-crown/);
   assert.match(html, /boss-crack/);
+  assert.match(html, /boss-impact/);
+  assert.match(html, /boss-energy/);
+  assert.match(html, /boss-horn-fragment/);
   assert.match(css, /@keyframes crown-fly/);
   assert.match(css, /@keyframes boss-crumble/);
   assert.match(css, /@keyframes eyes-last/);
-  assert.match(game, /classList\.add\("dying"\)/);
+  assert.match(game, /classList\.add\("dying", "portal-unstable"\)/);
+});
+
+test("Absolut besitzt drei gesteigerte Trefferreaktionen und einen mehrstufigen finalen Zerfall", () => {
+  assert.match(game, /ABSOLUTE_HIT_DURATIONS = Object\.freeze\(\[0, 1100, 1280, 1480\]\)/);
+  assert.match(game, /ABSOLUTE_DEATH_DURATION = 4300/);
+  assert.match(game, /const hitClass = `hit-\$\{nextHit\}`/);
+  assert.match(css, /@keyframes absolute-hit-one/);
+  assert.match(css, /@keyframes absolute-hit-two/);
+  assert.match(css, /@keyframes absolute-hit-three/);
+  assert.match(css, /@keyframes absolute-horn-break/);
+  assert.match(css, /@keyframes absolute-death-cracks/);
+  assert.match(css, /@keyframes absolute-eye-overload/);
+  assert.match(css, /@keyframes absolute-portal-instability/);
+  assert.match(css, /@keyframes portal-collapse/);
 });
 
 test("Trefferstatus wird bei Absolut sofort aktualisiert", () => {

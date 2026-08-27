@@ -19,8 +19,13 @@ test("Diebstahl wird von Leicht bis Absolut schneller und intensiver", () => {
     assert.ok(presentations[index].intensity > presentations[index - 1].intensity);
     assert.ok(presentations[index].particles > presentations[index - 1].particles);
   }
-  assert.ok(presentations[1].totalMs >= 1350 && presentations[1].totalMs <= 1500);
-  assert.ok(presentations.at(-1).totalMs >= 1100, "Absolut muss trotz höherem Tempo lesbar bleiben");
+  assert.ok(presentations[1].totalMs >= 1550 && presentations[1].totalMs <= 1650);
+  assert.ok(presentations.at(-1).totalMs >= 1250, "Absolut muss trotz höherem Tempo lesbar bleiben");
+
+  for (const presentation of presentations) {
+    assert.ok(presentation.durations.search > Math.round(350 * presentation.speed));
+    assert.ok(presentation.durations.suction > Math.round(300 * presentation.speed));
+  }
 });
 
 for (const bossId of ["easy", "absolute"]) {

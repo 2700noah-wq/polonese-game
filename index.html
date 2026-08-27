@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#d90429" />
     <meta name="description" content="Polonese – das farbenfrohe Online-Logikspiel mit festen Levels und geheimen Bosskämpfen." />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260827-theft-animation-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260827-mobile-drag-absolute-1" />
     <title>Polonese – Puzzle das Feld voll</title>
   </head>
   <body data-theme="polish">
@@ -121,9 +121,11 @@
               <div class="boss-portal" aria-hidden="true"><i></i><i></i><i></i></div>
               <button class="boss-creature" id="bossCreature" type="button" tabindex="-1" aria-label="Secret-Level-Boss angreifen">
                 <span class="boss-shadow"></span>
+                <span class="boss-impact" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
                 <span class="boss-crown"><i></i><i></i><i></i></span>
                 <span class="boss-horn horn-left"></span>
                 <span class="boss-horn horn-right"></span>
+                <span class="boss-horn-fragment" aria-hidden="true"></span>
                 <span class="boss-body">
                   <span class="boss-eye eye-left"><i></i></span>
                   <span class="boss-eye eye-right"><i></i></span>
@@ -132,7 +134,8 @@
                   <span class="boss-crack crack-two"></span>
                   <span class="boss-crack crack-three"></span>
                 </span>
-                <span class="boss-debris"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                <span class="boss-energy" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                <span class="boss-debris" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
               </button>
             </div>
             <p class="board-message" id="boardMessage">Wähle unten einen Stein aus und tippe auf das Spielfeld – oder ziehe ihn direkt hinein.</p>
@@ -226,6 +229,6 @@
       </ol>
     </dialog>
 
-    <script type="module" src="./game.js?v=20260827-theft-animation-2"></script>
+    <script type="module" src="./game.js?v=20260827-mobile-drag-absolute-1"></script>
   </body>
 </html>
