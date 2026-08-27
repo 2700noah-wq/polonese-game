@@ -31,6 +31,36 @@ export function theftPresentationFor(bossId) {
   });
 }
 
+export async function runTheftPrelude(presentation, { startSearch, lockTarget, wait }) {
+  startSearch();
+  await wait(presentation.durations.search);
+  const target = lockTarget();
+  await wait(presentation.durations.lock);
+  return target;
+}
+
+export async function runTheftCapture(presentation, target, {
+  warnTarget,
+  startSuction,
+  releaseParticles,
+  wait,
+}) {
+  if (!target) {
+    await wait(
+      presentation.durations.wobble
+      + presentation.durations.suction
+      + presentation.durations.particles,
+    );
+    return;
+  }
+  warnTarget(target);
+  await wait(presentation.durations.wobble);
+  const portal = startSuction(target);
+  await wait(presentation.durations.suction);
+  releaseParticles(target, portal);
+  await wait(presentation.durations.particles);
+}
+
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
