@@ -37,13 +37,13 @@ import {
   canFinishBoss,
   createBossState,
   isAbsoluteBoss,
+  markAbsoluteTriggerUsed,
   recordAbsoluteHit,
   recordAbsoluteMiss,
   recordTheft,
   shouldStartAbsoluteAttack,
-  shouldStartAbsoluteRetry,
   shouldStartNormalAttack,
-} from "./boss-engine.js?v=20260827-absolute-phases-face-1";
+} from "./boss-engine.js?v=20260828-absolute-triggers-6-0-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -405,7 +405,6 @@ function validateSecretFuture(placements) {
 
   const mustPrepareAttack = isAbsoluteBoss(state.boss)
     ? shouldStartAbsoluteAttack(state.boss, placements.length, currentPieces().length)
-      || shouldStartAbsoluteRetry(state.boss, placements.length, currentPieces().length)
     : shouldStartNormalAttack(state.boss, placements.length, currentPieces().length);
   if (!mustPrepareAttack) {
     state.boss.pendingMutation = null;
@@ -658,9 +657,7 @@ async function checkProgress() {
     return;
   }
   if (isAbsoluteBoss(state.boss)) {
-    const absoluteAttackReady = shouldStartAbsoluteAttack(state.boss, state.placed.size, currentPieces().length)
-      || shouldStartAbsoluteRetry(state.boss, state.placed.size, currentPieces().length);
-    if (absoluteAttackReady) {
+    if (shouldStartAbsoluteAttack(state.boss, state.placed.size, currentPieces().length)) {
       await runAbsoluteAttack();
       return;
     }
@@ -1004,6 +1001,12 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
   const plan = buildBossMutationPlan(clonePlacements());
   if (!plan) {
     setBoardMessage("Das Portal bleibt vorerst geschlossen. Du kannst deine Anordnung weiter verändern.");
+    if (alreadyLocked) setInputLocked(false);
+    return;
+  }
+
+  const remainingCount = currentPieces().length - state.placed.size;
+  if (!markAbsoluteTriggerUsed(state.boss, remainingCount)) {
     if (alreadyLocked) setInputLocked(false);
     return;
   }

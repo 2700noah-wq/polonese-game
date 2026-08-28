@@ -106,10 +106,13 @@ test("Absolut verliert sein Grinsen stufenweise und zeigt bei 3 keinen Zahn mehr
   assert.match(css, /\.boss-arena\.is-absolute\[data-damage="3"\][\s\S]*\.boss-mouth::before/);
 });
 
-test("Absolut nutzt eigene 2-1-0-Phasen und einen getrennten Miss-Wiederholungsweg", () => {
-  assert.match(bossEngine, /ABSOLUTE_REMAINING_TRIGGERS = \[2, 1, 0\]/);
-  assert.match(bossEngine, /function shouldStartAbsoluteRetry/);
-  assert.match(game, /shouldStartAbsoluteAttack\([\s\S]*shouldStartAbsoluteRetry/);
+test("Absolut nutzt einmalige Reststein-Trigger von 6 bis 0", () => {
+  assert.match(bossEngine, /ABSOLUTE_REMAINING_TRIGGERS = \[6, 5, 4, 3, 2, 1, 0\]/);
+  assert.match(bossEngine, /usedAbsoluteTriggers: \[\]/);
+  assert.match(bossEngine, /function markAbsoluteTriggerUsed/);
+  assert.doesNotMatch(bossEngine, /function shouldStartAbsoluteRetry/);
+  assert.doesNotMatch(game, /shouldStartAbsoluteRetry/);
+  assert.match(game, /markAbsoluteTriggerUsed\(state\.boss, remainingCount\)/);
   const hitFlow = game.match(/async function animateAbsoluteHit\(\) \{[\s\S]*?\n\}\n\nasync function runAbsoluteAttack/)?.[0] ?? "";
   assert.ok(hitFlow);
   assert.doesNotMatch(hitFlow, /runAbsoluteAttack\(\{ alreadyLocked/);

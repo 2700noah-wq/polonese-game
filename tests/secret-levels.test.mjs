@@ -139,13 +139,19 @@ for (const bossId of ["easy", "medium", "hard", "expert"]) {
   });
 }
 
-test("Absolut bleibt auch nach mehreren verpassten, validierten Angriffen kontrolliert lösbar", () => {
+test("Absolut bleibt nach Misses auf allen Triggerwerten von 6 bis 0 vollständig lösbar", () => {
   let puzzle = createBossPuzzle("absolute");
   let placements = [];
-  for (let attackIndex = 0; attackIndex < 6; attackIndex += 1) {
-    placements = extendAlongSolution(puzzle, placements, 8);
+  const remainingTriggers = [6, 5, 4, 3, 2, 1, 0];
+
+  for (let attackIndex = 0; attackIndex < remainingTriggers.length; attackIndex += 1) {
+    const remainingCount = remainingTriggers[attackIndex];
+    const triggerPlacementCount = puzzle.pieces.length - remainingCount;
+    placements = extendAlongSolution(puzzle, placements, triggerPlacementCount);
+    assert.equal(placements.length, triggerPlacementCount);
+
     const plan = planAttack(puzzle, placements, attackIndex);
-    assert.ok(plan);
+    assert.ok(plan, `Miss bei ${remainingCount} Reststeinen muss validierbar sein`);
     assert.equal(plan.model.validateCompletedBoard(plan.solution, plan.clues), true);
     const retained = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
     for (const placement of retained) {
@@ -153,5 +159,16 @@ test("Absolut bleibt auch nach mehreren verpassten, validierten Angriffen kontro
     }
     placements = retained;
     puzzle = applyPlan(puzzle, plan);
+
+    assert.equal(placements.length, triggerPlacementCount - 1);
+    placements = extendAlongSolution(puzzle, placements, triggerPlacementCount);
+    assert.equal(placements.length, triggerPlacementCount, "der Ersatzstein schließt die Miss-Lücke wieder");
+    for (const placement of placements) {
+      assert.equal(puzzle.solution.some((candidate) => samePlacement(candidate, placement)), true);
+    }
   }
+
+  assert.equal(placements.length, puzzle.pieces.length);
+  assert.equal(puzzle.model.validateCompletedBoard(placements, puzzle.clues), true);
+  assert.equal(puzzle.model.validateCompletedBoard(puzzle.solution, puzzle.clues), true);
 });
