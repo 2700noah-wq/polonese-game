@@ -57,6 +57,17 @@ export function markAbsoluteTriggerUsed(bossState, remainingCount) {
   return true;
 }
 
+export function isAbsoluteRunExhausted(bossState) {
+  return Boolean(
+    isAbsoluteBoss(bossState)
+    && !bossState.dead
+    && bossState.hits < ABSOLUTE_HITS_TO_WIN
+    && ABSOLUTE_REMAINING_TRIGGERS.every((remainingCount) => (
+      bossState.usedAbsoluteTriggers.includes(remainingCount)
+    ))
+  );
+}
+
 export function recordTheft(bossState, stolen) {
   bossState.thefts.push(stolen);
   bossState.attackCount += 1;

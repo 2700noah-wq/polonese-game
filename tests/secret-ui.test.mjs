@@ -110,9 +110,13 @@ test("Absolut nutzt einmalige Reststein-Trigger von 6 bis 0", () => {
   assert.match(bossEngine, /ABSOLUTE_REMAINING_TRIGGERS = \[6, 5, 4, 3, 2, 1, 0\]/);
   assert.match(bossEngine, /usedAbsoluteTriggers: \[\]/);
   assert.match(bossEngine, /function markAbsoluteTriggerUsed/);
+  assert.match(bossEngine, /function isAbsoluteRunExhausted/);
   assert.doesNotMatch(bossEngine, /function shouldStartAbsoluteRetry/);
   assert.doesNotMatch(game, /shouldStartAbsoluteRetry/);
   assert.match(game, /markAbsoluteTriggerUsed\(state\.boss, remainingCount\)/);
+  assert.match(game, /boardComplete && isAbsoluteRunExhausted\(state\.boss\)/);
+  assert.match(game, /Kampf verloren · Boss neu starten/);
+  assert.match(game, /Absolut ist entkommen\. Öffne „Boss wählen“ und starte den Kampf erneut\./);
   const hitFlow = game.match(/async function animateAbsoluteHit\(\) \{[\s\S]*?\n\}\n\nasync function runAbsoluteAttack/)?.[0] ?? "";
   assert.ok(hitFlow);
   assert.doesNotMatch(hitFlow, /runAbsoluteAttack\(\{ alreadyLocked/);

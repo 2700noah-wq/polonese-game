@@ -8,6 +8,7 @@ import {
   NORMAL_BOSS_THEFTS,
   canFinishBoss,
   createBossState,
+  isAbsoluteRunExhausted,
   markAbsoluteTriggerUsed,
   recordAbsoluteHit,
   recordAbsoluteMiss,
@@ -65,6 +66,8 @@ test("Absolut greift jeden Restwert von 6 bis 0 höchstens einmal an", () => {
   assert.equal(boss.attackCount, ABSOLUTE_REMAINING_TRIGGERS.length);
   assert.equal(boss.hits, 0);
   assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), false);
+  assert.equal(isAbsoluteRunExhausted(boss), true);
+  assert.equal(canFinishBoss(boss, true), false);
 });
 
 test("Absolut endet bei direkten Treffern auf 6, 5 und 4 Reststeinen", () => {
@@ -79,6 +82,7 @@ test("Absolut endet bei direkten Treffern auf 6, 5 und 4 Reststeinen", () => {
   assert.equal(boss.attackCount, 3);
   assert.equal(boss.hits, 3);
   assert.equal(boss.dead, true);
+  assert.equal(isAbsoluteRunExhausted(boss), false);
   for (const remainingCount of [3, 2, 1, 0]) {
     assert.equal(shouldStartAbsoluteAttack(boss, 10 - remainingCount, 10), false);
   }

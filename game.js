@@ -37,13 +37,14 @@ import {
   canFinishBoss,
   createBossState,
   isAbsoluteBoss,
+  isAbsoluteRunExhausted,
   markAbsoluteTriggerUsed,
   recordAbsoluteHit,
   recordAbsoluteMiss,
   recordTheft,
   shouldStartAbsoluteAttack,
   shouldStartNormalAttack,
-} from "./boss-engine.js?v=20260828-absolute-triggers-6-0-1";
+} from "./boss-engine.js?v=20260828-absolute-triggers-6-0-2";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -661,6 +662,11 @@ async function checkProgress() {
       await runAbsoluteAttack();
       return;
     }
+    if (boardComplete && isAbsoluteRunExhausted(state.boss)) {
+      setBoardMessage("Absolut ist entkommen. Öffne „Boss wählen“ und starte den Kampf erneut.");
+      renderStatus();
+      return;
+    }
     if (canFinishBoss(state.boss, boardComplete)) completeSecretBoss();
     return;
   }
@@ -1199,7 +1205,9 @@ function renderStatus() {
     if (isAbsoluteBoss(state.boss)) {
       elements.secretBossStatus.textContent = state.boss.dead
         ? "Boss besiegt · Puzzle beenden"
-        : `Treffer ${state.boss.hits} / ${ABSOLUTE_HITS_TO_WIN}`;
+        : isAbsoluteRunExhausted(state.boss)
+          ? "Kampf verloren · Boss neu starten"
+          : `Treffer ${state.boss.hits} / ${ABSOLUTE_HITS_TO_WIN}`;
     } else {
       elements.secretBossStatus.textContent = `Bossangriffe ${state.boss.attackCount} / ${NORMAL_BOSS_THEFTS}`;
     }
