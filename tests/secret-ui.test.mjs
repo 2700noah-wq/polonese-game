@@ -110,6 +110,7 @@ test("Absolut nutzt einmalige Reststein-Trigger von 6 bis 0", () => {
   assert.match(bossEngine, /ABSOLUTE_REMAINING_TRIGGERS = \[6, 5, 4, 3, 2, 1, 0\]/);
   assert.match(bossEngine, /usedAbsoluteTriggers: \[\]/);
   assert.match(bossEngine, /function markAbsoluteTriggerUsed/);
+  assert.match(bossEngine, /function rollbackAbsoluteTrigger/);
   assert.match(bossEngine, /function isAbsoluteRunExhausted/);
   assert.doesNotMatch(bossEngine, /function shouldStartAbsoluteRetry/);
   assert.doesNotMatch(game, /shouldStartAbsoluteRetry/);
@@ -117,6 +118,19 @@ test("Absolut nutzt einmalige Reststein-Trigger von 6 bis 0", () => {
   assert.match(game, /boardComplete && isAbsoluteRunExhausted\(state\.boss\)/);
   assert.match(game, /Kampf verloren · Boss neu starten/);
   assert.match(game, /Absolut ist entkommen\. Öffne „Boss wählen“ und starte den Kampf erneut\./);
+  assert.match(game, /isAbsoluteBoss\(state\.boss\) \? planAbsoluteMutation : planNovelMutation/);
+  const attackFlow = game.match(/async function runAbsoluteAttack[\s\S]*?\n\}\n\nfunction renderTemplate/)?.[0] ?? "";
+  assert.ok(attackFlow);
+  assert.ok(
+    attackFlow.indexOf("markAbsoluteTriggerUsed(state.boss, remainingCount)")
+      < attackFlow.indexOf("setInputLocked(true)"),
+    "der Trigger muss vor dem ersten Angriffs-State verbraucht werden",
+  );
+  assert.ok(
+    attackFlow.indexOf("markAbsoluteTriggerUsed(state.boss, remainingCount)")
+      < attackFlow.indexOf("state.boss.pendingMutation ?? buildBossMutationPlan"),
+    "der Trigger muss vor dem Solverzugriff verbraucht werden",
+  );
   const hitFlow = game.match(/async function animateAbsoluteHit\(\) \{[\s\S]*?\n\}\n\nasync function runAbsoluteAttack/)?.[0] ?? "";
   assert.ok(hitFlow);
   assert.doesNotMatch(hitFlow, /runAbsoluteAttack\(\{ alreadyLocked/);

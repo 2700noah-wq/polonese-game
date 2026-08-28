@@ -13,6 +13,7 @@ import {
   recordAbsoluteHit,
   recordAbsoluteMiss,
   recordTheft,
+  rollbackAbsoluteTrigger,
   shouldStartAbsoluteAttack,
   shouldStartNormalAttack,
 } from "../boss-engine.js";
@@ -68,6 +69,20 @@ test("Absolut greift jeden Restwert von 6 bis 0 höchstens einmal an", () => {
   assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), false);
   assert.equal(isAbsoluteRunExhausted(boss), true);
   assert.equal(canFinishBoss(boss, true), false);
+});
+
+test("Absolut initialisiert fehlenden Trigger-State sicher und kann nur einen fehlgeschlagenen Start zurückrollen", () => {
+  const boss = createBossState("absolute");
+  delete boss.usedAbsoluteTriggers;
+
+  assert.equal(shouldStartAbsoluteAttack(boss, 4, 10), true);
+  assert.deepEqual(boss.usedAbsoluteTriggers, []);
+  assert.equal(markAbsoluteTriggerUsed(boss, 6), true);
+  assert.equal(shouldStartAbsoluteAttack(boss, 4, 10), false);
+  assert.equal(rollbackAbsoluteTrigger(boss, 6), true);
+  assert.equal(rollbackAbsoluteTrigger(boss, 6), false);
+  assert.deepEqual(boss.usedAbsoluteTriggers, []);
+  assert.equal(shouldStartAbsoluteAttack(boss, 4, 10), true);
 });
 
 test("Absolut endet bei direkten Treffern auf 6, 5 und 4 Reststeinen", () => {

@@ -10,6 +10,7 @@ import {
   createBossSelectionItems,
   isBossUnlocked,
   isSecretModeUnlocked,
+  planAbsoluteMutation,
   planNovelMutation,
   secretModeLockMessage,
 } from "../secret-levels.js";
@@ -31,7 +32,8 @@ function extendAlongSolution(puzzle, current, targetCount) {
 }
 
 function planAttack(puzzle, placements, attackIndex) {
-  return planNovelMutation({
+  const planner = puzzle.bossId === "absolute" ? planAbsoluteMutation : planNovelMutation;
+  return planner({
     puzzle,
     placements,
     bossId: puzzle.bossId,
@@ -40,6 +42,30 @@ function planAttack(puzzle, placements, attackIndex) {
     seed: `${puzzle.bossId}-${attackIndex}`,
   });
 }
+
+test("Absolut bereitet den ersten Angriff bei 6 Reststeinen ohne blockierende Vollsuche vor", () => {
+  const puzzle = createBossPuzzle("absolute");
+  const placements = extendAlongSolution(puzzle, [], 4);
+  const seed = `${puzzle.seed}-0-${placements.map((placement) => placement.pieceId).join("-")}`;
+  const startedAt = performance.now();
+  const plan = planAbsoluteMutation({
+    puzzle,
+    placements,
+    bossId: "absolute",
+    serial: 1,
+    attackIndex: 0,
+    seed,
+  });
+  const elapsed = performance.now() - startedAt;
+
+  assert.ok(plan, "der 6er-Angriff braucht einen validierten Diebstahlplan");
+  assert.ok(elapsed < 2000, `der 6er-Plan darf den UI-Thread nicht blockieren (${Math.round(elapsed)} ms)`);
+  assert.equal(plan.model.validateCompletedBoard(plan.solution, plan.clues), true);
+  const retained = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
+  for (const placement of retained) {
+    assert.equal(plan.solution.some((candidate) => samePlacement(candidate, placement)), true);
+  }
+});
 
 function samePlacement(left, right) {
   return left.pieceId === right.pieceId

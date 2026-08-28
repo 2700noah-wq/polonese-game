@@ -21,6 +21,13 @@ export function isAbsoluteBoss(bossState) {
   return bossState?.id === "absolute";
 }
 
+function absoluteTriggerState(bossState) {
+  if (!Array.isArray(bossState?.usedAbsoluteTriggers)) {
+    bossState.usedAbsoluteTriggers = [];
+  }
+  return bossState.usedAbsoluteTriggers;
+}
+
 export function shouldStartNormalAttack(bossState, placedCount, pieceCount) {
   const remainingTrigger = NORMAL_BOSS_REMAINING_TRIGGERS[bossState?.attackCount];
   return Boolean(
@@ -33,37 +40,49 @@ export function shouldStartNormalAttack(bossState, placedCount, pieceCount) {
 
 export function shouldStartAbsoluteAttack(bossState, placedCount, pieceCount) {
   const remainingCount = pieceCount - placedCount;
+  const usedTriggers = isAbsoluteBoss(bossState) ? absoluteTriggerState(bossState) : [];
   return Boolean(
     bossState
     && isAbsoluteBoss(bossState)
     && !bossState.dead
     && bossState.hits < ABSOLUTE_HITS_TO_WIN
     && ABSOLUTE_REMAINING_TRIGGERS.includes(remainingCount)
-    && !bossState.usedAbsoluteTriggers.includes(remainingCount)
+    && !usedTriggers.includes(remainingCount)
   );
 }
 
 export function markAbsoluteTriggerUsed(bossState, remainingCount) {
+  const usedTriggers = isAbsoluteBoss(bossState) ? absoluteTriggerState(bossState) : [];
   if (
     !isAbsoluteBoss(bossState)
     || bossState.dead
     || bossState.hits >= ABSOLUTE_HITS_TO_WIN
     || !ABSOLUTE_REMAINING_TRIGGERS.includes(remainingCount)
-    || bossState.usedAbsoluteTriggers.includes(remainingCount)
+    || usedTriggers.includes(remainingCount)
   ) {
     return false;
   }
-  bossState.usedAbsoluteTriggers.push(remainingCount);
+  usedTriggers.push(remainingCount);
+  return true;
+}
+
+export function rollbackAbsoluteTrigger(bossState, remainingCount) {
+  if (!isAbsoluteBoss(bossState)) return false;
+  const usedTriggers = absoluteTriggerState(bossState);
+  const index = usedTriggers.indexOf(remainingCount);
+  if (index < 0) return false;
+  usedTriggers.splice(index, 1);
   return true;
 }
 
 export function isAbsoluteRunExhausted(bossState) {
+  const usedTriggers = isAbsoluteBoss(bossState) ? absoluteTriggerState(bossState) : [];
   return Boolean(
     isAbsoluteBoss(bossState)
     && !bossState.dead
     && bossState.hits < ABSOLUTE_HITS_TO_WIN
     && ABSOLUTE_REMAINING_TRIGGERS.every((remainingCount) => (
-      bossState.usedAbsoluteTriggers.includes(remainingCount)
+      usedTriggers.includes(remainingCount)
     ))
   );
 }

@@ -27,9 +27,10 @@ import {
   createBossSelectionItems,
   isBossUnlocked,
   isSecretModeUnlocked,
+  planAbsoluteMutation,
   planNovelMutation,
   secretModeLockMessage,
-} from "./secret-levels.js?v=20260826-notice-3s-1";
+} from "./secret-levels.js?v=20260828-absolute-trigger-crash-1";
 import {
   ABSOLUTE_HITS_TO_WIN,
   NORMAL_BOSS_THEFTS,
@@ -42,9 +43,10 @@ import {
   recordAbsoluteHit,
   recordAbsoluteMiss,
   recordTheft,
+  rollbackAbsoluteTrigger,
   shouldStartAbsoluteAttack,
   shouldStartNormalAttack,
-} from "./boss-engine.js?v=20260828-absolute-triggers-6-0-2";
+} from "./boss-engine.js?v=20260828-absolute-trigger-crash-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -391,7 +393,8 @@ function candidateFromCell(cellIndex) {
 
 function buildBossMutationPlan(placements) {
   if (!state.boss || state.boss.dead) return null;
-  return planNovelMutation({
+  const planMutation = isAbsoluteBoss(state.boss) ? planAbsoluteMutation : planNovelMutation;
+  return planMutation({
     puzzle: state.puzzle,
     placements,
     bossId: state.bossId,
@@ -1004,20 +1007,25 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
     if (alreadyLocked) setInputLocked(false);
     return;
   }
-  const plan = buildBossMutationPlan(clonePlacements());
-  if (!plan) {
-    setBoardMessage("Das Portal bleibt vorerst geschlossen. Du kannst deine Anordnung weiter verändern.");
-    if (alreadyLocked) setInputLocked(false);
-    return;
-  }
-
   const remainingCount = currentPieces().length - state.placed.size;
   if (!markAbsoluteTriggerUsed(state.boss, remainingCount)) {
     if (alreadyLocked) setInputLocked(false);
     return;
   }
 
+  // Der Trigger wird vor Lock, Solver, Portal und Animation verbraucht. Damit
+  // kann derselbe Restwert selbst bei mehreren Progress-Aufrufen im selben
+  // UI-Zyklus keine zweite parallele Absolut-Sequenz starten.
   if (!alreadyLocked) setInputLocked(true);
+  const plan = state.boss.pendingMutation ?? buildBossMutationPlan(clonePlacements());
+  if (!plan) {
+    rollbackAbsoluteTrigger(state.boss, remainingCount);
+    state.boss.pendingMutation = null;
+    setBoardMessage("Das Portal bleibt vorerst geschlossen. Du kannst deine Anordnung weiter verändern.");
+    setInputLocked(false);
+    return;
+  }
+
   const position = chooseAbsolutePosition();
   const presentation = configureBossArena(position);
   elements.bossArena.classList.add("portal-open");

@@ -215,6 +215,12 @@ export function planStaticMutation({
   return null;
 }
 
+const ABSOLUTE_SHAPE_POOL = Object.freeze([
+  ...PIECES.map((piece) => piece.cells),
+  createStaticBossPiece("absolute", "i").cells,
+  createStaticBossPiece("absolute", "x").cells,
+].map((cells) => Object.freeze(cells.map((cell) => Object.freeze([...cell])))));
+
 function occupiedCells(model, placements) {
   return new Set(placements.flatMap((placement) => model.placementCells(placement)));
 }
@@ -275,6 +281,65 @@ function validateMutationPlan({
     solution: solved.solution,
     model,
   };
+}
+
+export function planAbsoluteMutation({
+  puzzle,
+  placements,
+  bossId = "absolute",
+  serial,
+  attackIndex = 0,
+  seed = 0,
+}) {
+  const activeShapeKeys = new Set(
+    puzzle.pieces.map((piece) => canonicalShapeKey(piece.cells)),
+  );
+  const availableShapes = ABSOLUTE_SHAPE_POOL
+    .filter((cells) => !activeShapeKeys.has(canonicalShapeKey(cells)))
+    .sort((left, right) => (
+      hashSeed(`${seed}-${canonicalShapeKey(left)}`)
+      - hashSeed(`${seed}-${canonicalShapeKey(right)}`)
+    ));
+
+  // Auf dem unveränderten 50-Felder-Brett fehlen aus dem vollständigen
+  // Pentomino-Pool immer zwei Formen. Diese Kandidaten lassen sich direkt
+  // mit dem vorhandenen Solver prüfen, ohne den Browser mit einer offenen
+  // Suche über alle noch nicht gesetzten Teile zu blockieren.
+  for (const cells of availableShapes) {
+    const replacementPiece = createMutationPiece(bossId, serial, cells);
+    const plan = planStaticMutation({
+      puzzle,
+      placements,
+      replacementPiece,
+      attackIndex,
+      seed: hashSeed(`${seed}-${replacementPiece.id}-${canonicalShapeKey(cells)}`),
+    });
+    if (plan) return plan;
+  }
+
+  // Falls keine der zwei fehlenden Formen mit den sichtbaren Platzierungen
+  // vereinbar ist, bleibt als schneller und sicherer Rückfall derselbe
+  // Fußabdruck unter neuer Boss-Stein-Identität. Auch dieser Weg wird gegen
+  // alle liegenden Steine und die vollständige Endlösung validiert.
+  for (const stolenPlacement of candidateOrder(placements, puzzle.clues, attackIndex, `${seed}-fallback`)) {
+    const stolenPiece = puzzle.model.getPiece(stolenPlacement.pieceId);
+    if (!stolenPiece) continue;
+    const fixed = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
+    const nextClues = puzzle.clues.filter((clue) => clue.pieceId !== stolenPlacement.pieceId);
+    const replacement = createMutationPiece(bossId, serial, stolenPiece.cells);
+    const plan = validateMutationPlan({
+      puzzle,
+      stolenPlacement,
+      stolenPiece,
+      replacement,
+      fixed,
+      nextClues,
+      seed: hashSeed(`${seed}-fallback-${stolenPlacement.pieceId}`),
+    });
+    if (plan) return plan;
+  }
+
+  return null;
 }
 
 export function planNovelMutation({
