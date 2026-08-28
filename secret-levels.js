@@ -317,6 +317,23 @@ export function planAbsoluteMutation({
     if (plan) return plan;
   }
 
+  // Freie Spielerplatzierungen können nach einem Miss eine Form benötigen,
+  // die nicht zu den zwölf Standard-Pentominos gehört. Die offene Suche wird
+  // deshalb nur als streng begrenzter Folgepfad ausgeführt: Sie darf eine
+  // reparierende Custom-Form finden, aber niemals wieder den UI-Thread wie
+  // beim früheren 6er-Crash blockieren.
+  const novelPlan = planNovelMutation({
+    puzzle,
+    placements,
+    bossId,
+    serial,
+    attackIndex,
+    seed: `${seed}-absolute-novel`,
+    maxExplored: 1600,
+    maxMilliseconds: 900,
+  });
+  if (novelPlan) return novelPlan;
+
   // Falls keine der zwei fehlenden Formen mit den sichtbaren Platzierungen
   // vereinbar ist, bleibt als schneller und sicherer Rückfall derselbe
   // Fußabdruck unter neuer Boss-Stein-Identität. Auch dieser Weg wird gegen
@@ -349,13 +366,19 @@ export function planNovelMutation({
   serial,
   attackIndex = 0,
   seed = 0,
+  maxExplored = 4000,
+  maxMilliseconds = Number.POSITIVE_INFINITY,
 }) {
   const clues = puzzle.clues;
   let best = null;
   let explored = 0;
-  const maxExplored = 4000;
+  const deadline = Number.isFinite(maxMilliseconds)
+    ? Date.now() + Math.max(1, maxMilliseconds)
+    : Number.POSITIVE_INFINITY;
+  const searchExpired = () => explored >= maxExplored || Date.now() >= deadline;
 
   for (const stolenPlacement of candidateOrder(placements, clues, attackIndex, seed)) {
+    if (searchExpired()) break;
     const stolenPiece = puzzle.model.getPiece(stolenPlacement.pieceId);
     if (!stolenPiece) continue;
     const fixed = placements.filter((placement) => placement.pieceId !== stolenPlacement.pieceId);
@@ -386,7 +409,7 @@ export function planNovelMutation({
     const used = new Set();
 
     function search() {
-      if (explored >= maxExplored) return;
+      if (searchExpired()) return;
       if (chosen.length === remainingPieces.length) {
         explored += 1;
         const filled = new Set(occupied);
@@ -442,6 +465,7 @@ export function planNovelMutation({
         - hashSeed(`${seed}-${right.pieceId}-${right.variant}-${right.row}-${right.col}`)
       ));
       for (const placement of randomized) {
+        if (searchExpired()) break;
         const cells = puzzle.model.placementCells(placement);
         if (cells.some((cell) => occupied.has(cell))) continue;
         cells.forEach((cell) => occupied.add(cell));
@@ -449,7 +473,7 @@ export function planNovelMutation({
         search();
         chosen.pop();
         cells.forEach((cell) => occupied.delete(cell));
-        if (best?.score >= 50 || explored >= maxExplored) break;
+        if (best?.score >= 50 || searchExpired()) break;
       }
       used.delete(nextPiece.id);
     }

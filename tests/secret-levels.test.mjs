@@ -67,6 +67,50 @@ test("Absolut bereitet den ersten Angriff bei 6 Reststeinen ohne blockierende Vo
   }
 });
 
+test("Absolut findet nach einem 6er-Miss auch für eine freie 5er-Anordnung einen Folgeangriff", () => {
+  let puzzle = createBossPuzzle("absolute");
+  const firstPlacements = ["z", "p", "t", "y"]
+    .map((pieceId) => puzzle.solution.find((placement) => placement.pieceId === pieceId));
+  const firstPlan = planAbsoluteMutation({
+    puzzle,
+    placements: firstPlacements,
+    bossId: "absolute",
+    serial: 1,
+    attackIndex: 0,
+    seed: `${puzzle.seed}-0-${firstPlacements.map((placement) => placement.pieceId).join("-")}`,
+  });
+  assert.ok(firstPlan);
+  puzzle = applyPlan(puzzle, firstPlan);
+
+  // Diese geometrisch erlaubte Anordnung konnte der schnelle Standardformen-
+  // Pfad nicht mutieren. Der begrenzte Custom-Planer muss den 5er-Spawn retten.
+  const followUpPlacements = [
+    { pieceId: "p", variant: 1, row: 0, col: 0 },
+    { pieceId: "t", variant: 3, row: 1, col: 0 },
+    { pieceId: "y", variant: 3, row: 3, col: 0 },
+    { pieceId: "f", variant: 0, row: 0, col: 3 },
+    { pieceId: "l", variant: 0, row: 0, col: 6 },
+  ];
+  const startedAt = performance.now();
+  const followUpPlan = planAbsoluteMutation({
+    puzzle,
+    placements: followUpPlacements,
+    bossId: "absolute",
+    serial: 2,
+    attackIndex: 1,
+    seed: `${puzzle.seed}-1-${followUpPlacements.map((placement) => placement.pieceId).join("-")}`,
+  });
+  const elapsed = performance.now() - startedAt;
+
+  assert.ok(followUpPlan, "der erstmals erreichte 5er-Wert braucht einen Folgeangriff");
+  assert.ok(elapsed < 1500, `der begrenzte Folgeplan darf den UI-Thread nicht blockieren (${Math.round(elapsed)} ms)`);
+  assert.equal(followUpPlan.model.validateCompletedBoard(followUpPlan.solution, followUpPlan.clues), true);
+  const retained = followUpPlacements.filter((placement) => placement.pieceId !== followUpPlan.stolen.piece.id);
+  for (const placement of retained) {
+    assert.equal(followUpPlan.solution.some((candidate) => samePlacement(candidate, placement)), true);
+  }
+});
+
 function samePlacement(left, right) {
   return left.pieceId === right.pieceId
     && left.variant === right.variant

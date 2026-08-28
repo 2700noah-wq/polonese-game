@@ -119,6 +119,8 @@ test("Absolut nutzt einmalige Reststein-Trigger von 6 bis 0", () => {
   assert.match(game, /Kampf verloren · Boss neu starten/);
   assert.match(game, /Absolut ist entkommen\. Öffne „Boss wählen“ und starte den Kampf erneut\./);
   assert.match(game, /isAbsoluteBoss\(state\.boss\) \? planAbsoluteMutation : planNovelMutation/);
+  assert.match(game, /function hideBossArena\(\)[\s\S]*state\.boss\.attackWindow = false/);
+  assert.match(game, /function setInputLocked\(locked\)[\s\S]*state\.boss\.inputLocked = locked/);
   const attackFlow = game.match(/async function runAbsoluteAttack[\s\S]*?\n\}\n\nfunction renderTemplate/)?.[0] ?? "";
   assert.ok(attackFlow);
   assert.ok(

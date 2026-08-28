@@ -30,7 +30,7 @@ import {
   planAbsoluteMutation,
   planNovelMutation,
   secretModeLockMessage,
-} from "./secret-levels.js?v=20260828-absolute-trigger-crash-1";
+} from "./secret-levels.js?v=20260828-absolute-followup-1";
 import {
   ABSOLUTE_HITS_TO_WIN,
   NORMAL_BOSS_THEFTS,
@@ -46,7 +46,7 @@ import {
   rollbackAbsoluteTrigger,
   shouldStartAbsoluteAttack,
   shouldStartNormalAttack,
-} from "./boss-engine.js?v=20260828-absolute-trigger-crash-1";
+} from "./boss-engine.js?v=20260828-absolute-followup-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -703,6 +703,7 @@ function hideBossArena() {
   window.clearTimeout(bossHitTimeoutId);
   bossHitTimeoutId = null;
   bossHitResolver = null;
+  if (state.boss) state.boss.attackWindow = false;
   clearTheftEffects();
   if (!elements.bossArena) return;
   elements.bossArena.className = "boss-arena";
@@ -713,6 +714,7 @@ function hideBossArena() {
 
 function setInputLocked(locked) {
   state.inputLocked = locked;
+  if (state.boss) state.boss.inputLocked = locked;
   elements.body.classList.toggle("boss-sequence-active", locked);
   renderTray();
   renderStatus();
