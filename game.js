@@ -18,7 +18,7 @@ import {
   theftPresentationFor,
 } from "./boss-animation.js?v=20260827-mobile-drag-absolute-1";
 import { createPuzzleModel } from "./puzzle-model.js?v=20260824-secret-1";
-import { sanitizeStats } from "./game-storage.js?v=20260826-boss-phases-1";
+import { sanitizeStats, saveStatsToStorage } from "./game-storage.js?v=20260831-storage-write-1";
 import {
   BOSS_CONFIG,
   SECRET_NOTICE_MS,
@@ -222,7 +222,7 @@ function refreshActiveDrag() {
 }
 
 function saveStats() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
+  saveStatsToStorage(stats, { storageKey: STORAGE_KEY });
 }
 
 function wait(milliseconds) {

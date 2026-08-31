@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sanitizeStats } from "../game-storage.js";
+import { sanitizeStats, saveStatsToStorage } from "../game-storage.js";
 
 const options = {
   difficultyIds: ["easy", "medium", "hard", "expert"],
@@ -51,4 +51,52 @@ test("Bossfortschritt wird streng als boolescher Zustand geladen", () => {
   assert.equal(migrated.secret.completed.medium, false);
   assert.equal(migrated.secret.completed.expert, true);
   assert.equal(migrated.secret.completed.absolute, false);
+});
+
+
+test("Spielstand wird unter unverändertem Schlüssel und in unveränderter Struktur gespeichert", () => {
+  const stats = sanitizeStats({
+    completed: { easy: [0, 3], medium: [], hard: [], expert: [] },
+    currentLevel: { easy: 4, medium: 0, hard: 0, expert: 0 },
+    totalSolved: 2,
+    secret: {
+      unlocked: true,
+      unlockNoticeShown: false,
+      completed: { easy: true, medium: false, hard: false, expert: false, absolute: false },
+    },
+  }, options);
+  let savedKey;
+  let savedValue;
+
+  const saved = saveStatsToStorage(stats, {
+    storageKey: "polonese-game-v1",
+    storageProvider: () => ({
+      setItem(key, value) {
+        savedKey = key;
+        savedValue = value;
+      },
+    }),
+  });
+
+  assert.equal(saved, true);
+  assert.equal(savedKey, "polonese-game-v1");
+  assert.deepEqual(JSON.parse(savedValue), stats);
+});
+
+test("Fehler von localStorage.setItem werden nicht nach außen weitergeworfen", () => {
+  const stats = sanitizeStats(null, options);
+  let saved;
+
+  assert.doesNotThrow(() => {
+    saved = saveStatsToStorage(stats, {
+      storageKey: "polonese-game-v1",
+      storageProvider: () => ({
+        setItem() {
+          throw new Error("Storage blockiert");
+        },
+      }),
+    });
+  });
+
+  assert.equal(saved, false);
 });

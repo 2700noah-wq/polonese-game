@@ -28,6 +28,18 @@ export function createFreshStats(difficultyIds) {
   };
 }
 
+export function saveStatsToStorage(stats, {
+  storageKey,
+  storageProvider = () => globalThis.localStorage,
+} = {}) {
+  try {
+    storageProvider().setItem(storageKey, JSON.stringify(stats));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function sanitizeStats(stored, {
   difficultyIds,
   levelsPerDifficulty,
