@@ -98,6 +98,51 @@ test("Trefferstatus wird bei Absolut sofort aktualisiert", () => {
   );
 });
 
+test("Neu beginnen initialisiert einen Secret-Bossdurchlauf vollständig neu", () => {
+  assert.match(
+    game,
+    /function initializeSecretBossRun\(bossId,[\s\S]*?resetInteractionState\(\);[\s\S]*?state\.boss = createBossState\(bossId\);[\s\S]*?state\.puzzle = createBossPuzzle\(bossId\);/,
+  );
+  assert.match(
+    game,
+    /function restartSecretBoss\(\)[\s\S]*?initializeSecretBossRun\(bossId,/,
+  );
+  assert.match(
+    game,
+    /function resetBoard\(\) \{\s*if \(state\.mode === "secret"\) \{\s*restartSecretBoss\(\);\s*return;/,
+  );
+  assert.match(
+    game,
+    /function resetInteractionState\(\)[\s\S]*?clearDragSession[\s\S]*?state\.placed\.clear\(\)[\s\S]*?state\.history = \[\][\s\S]*?state\.preview = null[\s\S]*?state\.inputLocked = false[\s\S]*?resetBossPresentation\(\)/,
+  );
+  assert.match(
+    game,
+    /function resetBossPresentation\(\)[\s\S]*?hideBossArena\(\)[\s\S]*?removeAttribute\("data-boss"\)[\s\S]*?removeAttribute\("data-damage"\)[\s\S]*?removeAttribute\("style"\)/,
+  );
+});
+
+test("normale Levelabschlüsse verwenden den eindeutigen Fortschrittszähler", () => {
+  const completionFlow = game.match(
+    /function completeFixedLevel\(\) \{[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.ok(completionFlow);
+  assert.match(completionFlow, /recordFixedLevelCompletion\(stats, state\.difficulty, state\.levelIndex\)/);
+  assert.doesNotMatch(completionFlow, /totalSolved\s*\+=/);
+});
+
+test("geöffnete Dialoge blockieren sämtliche Gameplay-Tastenkürzel", () => {
+  assert.match(game, /function isGameDialogOpen\(\) \{\s*return Boolean\(document\.querySelector\("dialog\[open\]"\)\);\s*\}/);
+  const hotkeys = game.match(
+    /document\.addEventListener\("keydown", \(event\) => \{[\s\S]*?\n\}\);/,
+  )?.[0] ?? "";
+  assert.ok(hotkeys);
+  const guardIndex = hotkeys.indexOf("if (isGameDialogOpen()) return;");
+  assert.ok(guardIndex >= 0);
+  for (const action of ["rotateSelected()", "flipSelected()", "cancelSelection(", "undo()"]) {
+    assert.ok(guardIndex < hotkeys.indexOf(action), `${action} muss hinter der Dialogsperre liegen`);
+  }
+});
+
 test("Absolut verliert sein Grinsen stufenweise und zeigt bei 3 keinen Zahn mehr", () => {
   assert.match(css, /\.boss-arena\.is-absolute\[data-damage="1"\][\s\S]*--grin-scale: 0\.78/);
   assert.match(css, /\.boss-arena\.is-absolute\[data-damage="2"\][\s\S]*--grin-scale: 0\.52/);

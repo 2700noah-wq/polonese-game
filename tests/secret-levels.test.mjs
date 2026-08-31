@@ -128,6 +128,20 @@ function applyPlan(puzzle, plan) {
   };
 }
 
+test("ein neu erzeugtes Secret-Puzzle verwirft eine vorherige Bossmutation vollständig", () => {
+  const initial = createBossPuzzle("easy");
+  const placements = extendAlongSolution(initial, [], 8);
+  const plan = planAttack(initial, placements, 0);
+  assert.ok(plan);
+  const mutated = applyPlan(initial, plan);
+  assert.notDeepEqual(mutated.pieces, initial.pieces);
+
+  const restarted = createBossPuzzle("easy");
+  assert.deepEqual(restarted.pieces, initial.pieces);
+  assert.deepEqual(restarted.clues, initial.clues);
+  assert.deepEqual(restarted.solution, initial.solution);
+});
+
 test("Secret Level und Bossfreischaltungen werden aus echtem Fortschritt berechnet", () => {
   const none = completedDifficulties();
   const easy = completedDifficulties("easy");

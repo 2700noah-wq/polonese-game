@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sanitizeStats } from "../game-storage.js";
+import { recordFixedLevelCompletion, sanitizeStats } from "../game-storage.js";
 
 const options = {
   difficultyIds: ["easy", "medium", "hard", "expert"],
@@ -51,4 +51,20 @@ test("Bossfortschritt wird streng als boolescher Zustand geladen", () => {
   assert.equal(migrated.secret.completed.medium, false);
   assert.equal(migrated.secret.completed.expert, true);
   assert.equal(migrated.secret.completed.absolute, false);
+});
+
+test("normale Levels erhöhen totalSolved ausschließlich beim ersten Abschluss", () => {
+  const stats = sanitizeStats(null, options);
+
+  assert.equal(recordFixedLevelCompletion(stats, "easy", 4), true);
+  assert.equal(stats.totalSolved, 1);
+  assert.deepEqual(stats.completed.easy, [4]);
+
+  assert.equal(recordFixedLevelCompletion(stats, "easy", 4), false);
+  assert.equal(stats.totalSolved, 1);
+  assert.deepEqual(stats.completed.easy, [4]);
+
+  assert.equal(recordFixedLevelCompletion(stats, "easy", 5), true);
+  assert.equal(stats.totalSolved, 2);
+  assert.deepEqual(stats.completed.easy, [4, 5]);
 });

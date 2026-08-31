@@ -130,3 +130,26 @@ test("Absolut trennt Misses, Treffer und einmalige Triggerwerte voneinander", ()
   assert.equal(boss.dead, true);
   assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), false, "nach Treffer 3 folgt kein 0-Angriff");
 });
+
+test("ein neuer Secret-Durchlauf enthält keinerlei alten Bossfortschritt", () => {
+  const previous = createBossState("absolute");
+  previous.pendingMutation = { id: "alt" };
+  markAbsoluteTriggerUsed(previous, 6);
+  recordAbsoluteMiss(previous, { piece: { id: "gestohlen" } });
+  recordAbsoluteHit(previous);
+  previous.inputLocked = true;
+  previous.attackWindow = true;
+
+  const restarted = createBossState("absolute");
+  assert.deepEqual(restarted, {
+    id: "absolute",
+    thefts: [],
+    hits: 0,
+    attackCount: 0,
+    usedAbsoluteTriggers: [],
+    inputLocked: false,
+    attackWindow: false,
+    dead: false,
+    pendingMutation: null,
+  });
+});

@@ -28,6 +28,14 @@ export function createFreshStats(difficultyIds) {
   };
 }
 
+export function recordFixedLevelCompletion(stats, difficulty, levelIndex) {
+  const completed = stats.completed[difficulty];
+  if (completed.includes(levelIndex)) return false;
+  completed.push(levelIndex);
+  stats.totalSolved += 1;
+  return true;
+}
+
 export function sanitizeStats(stored, {
   difficultyIds,
   levelsPerDifficulty,

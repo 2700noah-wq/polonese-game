@@ -18,7 +18,7 @@ import {
   theftPresentationFor,
 } from "./boss-animation.js?v=20260827-mobile-drag-absolute-1";
 import { createPuzzleModel } from "./puzzle-model.js?v=20260824-secret-1";
-import { sanitizeStats } from "./game-storage.js?v=20260826-boss-phases-1";
+import { recordFixedLevelCompletion, sanitizeStats } from "./game-storage.js?v=20260831-staging-state-fixes-1";
 import {
   BOSS_CONFIG,
   SECRET_NOTICE_MS,
@@ -315,7 +315,7 @@ function resetInteractionState() {
   state.inputLocked = false;
   elements.body.classList.remove("dragging-piece", "boss-sequence-active");
   clearTheftEffects();
-  hideBossArena();
+  resetBossPresentation();
 }
 
 function createFixedPuzzle() {
@@ -343,21 +343,37 @@ function loadFixedPuzzle() {
   renderAll();
 }
 
-function startSecretBoss(bossId) {
-  if (!isBossUnlocked(bossId, stats.completed, stats.secret)) {
-    showSecretNotice(bossLockMessage(bossId));
-    return;
-  }
-  if (elements.secretPickerDialog.open) elements.secretPickerDialog.close();
+function initializeSecretBossRun(bossId, {
+  message = "Lege zuerst die Vorlagen-Teile. Der Boss beobachtet jeden Zug.",
+  toast = `${BOSS_CONFIG[bossId].label}: Der Boss wartet.`,
+} = {}) {
   resetInteractionState();
   state.mode = "secret";
   state.bossId = bossId;
   state.boss = createBossState(bossId);
   state.puzzle = createBossPuzzle(bossId);
   state.model = state.puzzle.model;
-  setBoardMessage("Lege zuerst die Vorlagen-Teile. Der Boss beobachtet jeden Zug.");
+  setBoardMessage(message);
   renderAll();
-  showToast(`${BOSS_CONFIG[bossId].label}: Der Boss wartet.`);
+  showToast(toast);
+}
+
+function startSecretBoss(bossId) {
+  if (!isBossUnlocked(bossId, stats.completed, stats.secret)) {
+    showSecretNotice(bossLockMessage(bossId));
+    return;
+  }
+  if (elements.secretPickerDialog.open) elements.secretPickerDialog.close();
+  initializeSecretBossRun(bossId);
+}
+
+function restartSecretBoss() {
+  if (!state.bossId) return;
+  const bossId = state.bossId;
+  initializeSecretBossRun(bossId, {
+    message: "Secret Level vollständig neu gestartet. Lege zuerst wieder die Vorlagen-Teile.",
+    toast: `${BOSS_CONFIG[bossId].label}: Neuer Bossdurchlauf.`,
+  });
 }
 
 function placementAtCell(cellIndex) {
@@ -590,6 +606,10 @@ function undo() {
 }
 
 function resetBoard() {
+  if (state.mode === "secret") {
+    restartSecretBoss();
+    return;
+  }
   if (!state.placed.size || interactionBlocked()) return;
   pushHistory();
   state.placed.clear();
@@ -626,9 +646,7 @@ function syncSecretUnlockAfterNormalProgress() {
 }
 
 function completeFixedLevel() {
-  const completed = stats.completed[state.difficulty];
-  if (!completed.includes(state.levelIndex)) completed.push(state.levelIndex);
-  stats.totalSolved += 1;
+  recordFixedLevelCompletion(stats, state.difficulty, state.levelIndex);
   syncSecretUnlockAfterNormalProgress();
   recordWinAndOpen({
     eyebrow: "Aufgabe geschafft",
@@ -710,6 +728,14 @@ function hideBossArena() {
   elements.bossArena.removeAttribute("data-position");
   elements.bossArena.setAttribute("aria-hidden", "true");
   elements.bossCreature.tabIndex = -1;
+}
+
+function resetBossPresentation() {
+  hideBossArena();
+  if (!elements.bossArena) return;
+  elements.bossArena.removeAttribute("data-boss");
+  elements.bossArena.removeAttribute("data-damage");
+  elements.bossArena.removeAttribute("style");
 }
 
 function setInputLocked(locked) {
@@ -1236,7 +1262,8 @@ function renderStatus() {
   elements.placedCounter.textContent = `${state.placed.size} / ${currentPieces().length} Teile`;
   elements.headerSolved.textContent = String(stats.totalSolved);
   elements.undoButton.disabled = state.history.length === 0 || interactionBlocked();
-  elements.resetButton.disabled = state.placed.size === 0 || interactionBlocked();
+  elements.resetButton.disabled = interactionBlocked()
+    || (state.mode === "fixed" && state.placed.size === 0);
   elements.statsPercent.textContent = `${Math.round((fixedSolved / (FIXED_LEVELS_PER_DIFFICULTY * DIFFICULTY_ORDER.length)) * 100)} %`;
 }
 
@@ -1668,8 +1695,13 @@ elements.continueButton.addEventListener("click", () => {
   }
 });
 
+function isGameDialogOpen() {
+  return Boolean(document.querySelector("dialog[open]"));
+}
+
 document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, textarea, select")) return;
+  if (isGameDialogOpen()) return;
   if (event.key.toLowerCase() === "r") rotateSelected();
   if (event.key.toLowerCase() === "f") flipSelected();
   if (event.key === "Escape" && state.selectedPieceId) cancelSelection({ restorePickedUp: true });
