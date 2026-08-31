@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import test from "node:test";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -8,6 +8,8 @@ const game = readFileSync(new URL("../game.js", import.meta.url), "utf8");
 const bossAnimation = readFileSync(new URL("../boss-animation.js", import.meta.url), "utf8");
 const bossEngine = readFileSync(new URL("../boss-engine.js", import.meta.url), "utf8");
 const secretLevels = readFileSync(new URL("../secret-levels.js", import.meta.url), "utf8");
+const gameStorage = readFileSync(new URL("../game-storage.js", import.meta.url), "utf8");
+const absoluteLoss = readFileSync(new URL("../absolute-loss.js", import.meta.url), "utf8");
 
 test("Endless ist vollständig aus Oberfläche und Spielsteuerung entfernt", () => {
   assert.doesNotMatch(html, /Endlos|data-mode="endless"/i);
@@ -54,7 +56,8 @@ test("Zielportal und Partikel bleiben auf das Brett begrenzt und blockieren kein
   assert.match(css, /\.board-wrap\s*\{[^}]*overflow:\s*hidden/s);
   assert.match(css, /\.theft-portal,\s*\.theft-particles\s*\{[^}]*pointer-events:\s*none/s);
   assert.match(game, /theftEffectBounds\(boardRect, cells\.map/);
-  assert.ok((game.match(/finally \{\s*hideBossArena\(\);\s*setInputLocked\(false\);\s*\}/g) ?? []).length >= 2);
+  assert.match(game, /finally \{\s*hideBossArena\(\);\s*setInputLocked\(false\);\s*\}/);
+  assert.match(game, /finally \{\s*hideBossArena\(\);\s*lost = finalizeAbsoluteAttack[\s\S]*if \(!lost\) setInputLocked\(false\);\s*\}/);
 });
 
 test("Touchziel, mobile Bossansicht und Wiederfreigabe der Steuerung sind vorgesehen", () => {
@@ -160,9 +163,7 @@ test("Absolut nutzt einmalige Reststein-Trigger von 6 bis 0", () => {
   assert.doesNotMatch(bossEngine, /function shouldStartAbsoluteRetry/);
   assert.doesNotMatch(game, /shouldStartAbsoluteRetry/);
   assert.match(game, /markAbsoluteTriggerUsed\(state\.boss, remainingCount\)/);
-  assert.match(game, /boardComplete && isAbsoluteRunExhausted\(state\.boss\)/);
-  assert.match(game, /Kampf verloren · Boss neu starten/);
-  assert.match(game, /Absolut ist entkommen\. Öffne „Boss wählen“ und starte den Kampf erneut\./);
+  assert.match(game, /finalizeAbsoluteAttack\(state\.boss, remainingCount\)/);
   assert.match(game, /isAbsoluteBoss\(state\.boss\) \? planAbsoluteMutation : planNovelMutation/);
   assert.match(game, /function hideBossArena\(\)[\s\S]*state\.boss\.attackWindow = false/);
   assert.match(game, /function setInputLocked\(locked\)[\s\S]*state\.boss\.inputLocked = locked/);
@@ -178,10 +179,50 @@ test("Absolut nutzt einmalige Reststein-Trigger von 6 bis 0", () => {
       < attackFlow.indexOf("state.boss.pendingMutation ?? buildBossMutationPlan"),
     "der Trigger muss vor dem Solverzugriff verbraucht werden",
   );
-  const hitFlow = game.match(/async function animateAbsoluteHit\(\) \{[\s\S]*?\n\}\n\nasync function runAbsoluteAttack/)?.[0] ?? "";
+  const hitFlow = game.match(/async function animateAbsoluteHit[\s\S]*?\n\}\n\nasync function runAbsoluteAttack/)?.[0] ?? "";
   assert.ok(hitFlow);
   assert.doesNotMatch(hitFlow, /runAbsoluteAttack\(\{ alreadyLocked/);
-  assert.match(hitFlow, /hideBossArena\(\);\s*setInputLocked\(false\);/);
+  assert.match(hitFlow, /if \(!keepLocked\) setInputLocked\(false\);/);
+});
+
+test("Absolut-Niederlage ist ein expliziter gesperrter State mit verzögertem Retry", () => {
+  assert.match(bossEngine, /lost: false/);
+  assert.match(bossEngine, /function finalizeAbsoluteAttack/);
+  assert.match(bossEngine, /remainingCount !== 0/);
+  assert.match(game, /async function enterAbsoluteLoss\(\)/);
+  assert.match(game, /setInputLocked\(true\)/);
+  assert.match(game, /runAbsoluteLossSequence/);
+  assert.match(game, /if \(lost\) await enterAbsoluteLoss\(\)/);
+  assert.match(game, /if \(finalizeAbsoluteAttack\(state\.boss, remainingCount\)\) await enterAbsoluteLoss\(\)/);
+  assert.doesNotMatch(game, /Absolut ist entkommen/);
+  assert.match(html, /id="absoluteLossScreen"[\s\S]*VERLOREN[\s\S]*id="absoluteRetryButton"[\s\S]*Erneut versuchen/);
+  assert.match(css, /\.absolute-loss-screen\.show-title/);
+  assert.match(css, /\.absolute-loss-screen\.show-retry/);
+  assert.match(absoluteLoss, /titleHold: 2000/);
+});
+
+test("Retry stoppt Musik und erzeugt einen vollständig frischen Absolut-Durchlauf", () => {
+  const retryFlow = game.match(/elements\.absoluteRetryButton\.addEventListener[\s\S]*?\n\}\);/)?.[0] ?? "";
+  assert.ok(retryFlow);
+  assert.ok(retryFlow.indexOf("stopAbsoluteLossMusic") < retryFlow.indexOf("restartSecretBoss()"));
+  assert.match(game, /function restartSecretBoss\(\)[\s\S]*initializeSecretBossRun\(bossId,/);
+  assert.match(game, /function resetInteractionState\(\)[\s\S]*resetAbsoluteLossPresentation\(\)/);
+  assert.match(game, /state\.boss = createBossState\(bossId\)/);
+});
+
+test("Niederlagenmusik ist lokal, klein und gegen blockiertes Autoplay abgesichert", () => {
+  assert.match(html, /id="absoluteLossMusic" src="\.\/assets\/absolute-loss\.ogg"/);
+  assert.doesNotMatch(html, /https?:\/\/[^"]+absolute-loss/);
+  assert.ok(statSync(new URL("../assets/absolute-loss.ogg", import.meta.url)).size > 1000);
+  assert.match(absoluteLoss, /playback\?\.catch/);
+  assert.match(absoluteLoss, /audio\.pause\(\);\s*audio\.currentTime = 0/);
+});
+
+test("game.js verwendet den fehlertoleranten zentralen Storage-Helper", () => {
+  assert.match(gameStorage, /function saveStatsToStorage/);
+  assert.match(gameStorage, /storageProvider\(\)\.setItem\(storageKey, JSON\.stringify\(stats\)\)/);
+  assert.match(gameStorage, /catch \{\s*return false/);
+  assert.match(game, /return saveStatsToStorage\(stats, \{ storageKey: STORAGE_KEY \}\)/);
 });
 
 test("isolierte 390-Pixel-Testansicht ist vorhanden", () => {

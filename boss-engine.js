@@ -13,6 +13,7 @@ export function createBossState(bossId) {
     inputLocked: false,
     attackWindow: false,
     dead: false,
+    lost: false,
     pendingMutation: null,
   };
 }
@@ -45,6 +46,7 @@ export function shouldStartAbsoluteAttack(bossState, placedCount, pieceCount) {
     bossState
     && isAbsoluteBoss(bossState)
     && !bossState.dead
+    && !bossState.lost
     && bossState.hits < ABSOLUTE_HITS_TO_WIN
     && ABSOLUTE_REMAINING_TRIGGERS.includes(remainingCount)
     && !usedTriggers.includes(remainingCount)
@@ -56,6 +58,7 @@ export function markAbsoluteTriggerUsed(bossState, remainingCount) {
   if (
     !isAbsoluteBoss(bossState)
     || bossState.dead
+    || bossState.lost
     || bossState.hits >= ABSOLUTE_HITS_TO_WIN
     || !ABSOLUTE_REMAINING_TRIGGERS.includes(remainingCount)
     || usedTriggers.includes(remainingCount)
@@ -87,6 +90,22 @@ export function isAbsoluteRunExhausted(bossState) {
   );
 }
 
+export function finalizeAbsoluteAttack(bossState, remainingCount) {
+  if (
+    !isAbsoluteBoss(bossState)
+    || remainingCount !== 0
+    || bossState.dead
+    || bossState.hits >= ABSOLUTE_HITS_TO_WIN
+    || !absoluteTriggerState(bossState).includes(0)
+  ) {
+    return false;
+  }
+  bossState.lost = true;
+  bossState.attackWindow = false;
+  bossState.pendingMutation = null;
+  return true;
+}
+
 export function recordTheft(bossState, stolen) {
   bossState.thefts.push(stolen);
   bossState.attackCount += 1;
@@ -95,6 +114,7 @@ export function recordTheft(bossState, stolen) {
 }
 
 export function recordAbsoluteMiss(bossState, stolen) {
+  if (!isAbsoluteBoss(bossState) || bossState.dead || bossState.lost) return bossState;
   bossState.thefts.push(stolen);
   bossState.attackCount += 1;
   bossState.pendingMutation = null;
@@ -102,7 +122,7 @@ export function recordAbsoluteMiss(bossState, stolen) {
 }
 
 export function recordAbsoluteHit(bossState) {
-  if (!isAbsoluteBoss(bossState) || bossState.dead) return bossState;
+  if (!isAbsoluteBoss(bossState) || bossState.dead || bossState.lost) return bossState;
   bossState.hits = Math.min(ABSOLUTE_HITS_TO_WIN, bossState.hits + 1);
   bossState.attackCount += 1;
   bossState.pendingMutation = null;

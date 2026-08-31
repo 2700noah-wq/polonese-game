@@ -36,6 +36,18 @@ export function recordFixedLevelCompletion(stats, difficulty, levelIndex) {
   return true;
 }
 
+export function saveStatsToStorage(stats, {
+  storageKey = "polonese-game-v1",
+  storageProvider = () => globalThis.localStorage,
+} = {}) {
+  try {
+    storageProvider().setItem(storageKey, JSON.stringify(stats));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function sanitizeStats(stored, {
   difficultyIds,
   levelsPerDifficulty,

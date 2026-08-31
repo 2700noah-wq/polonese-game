@@ -8,6 +8,7 @@ import {
   NORMAL_BOSS_THEFTS,
   canFinishBoss,
   createBossState,
+  finalizeAbsoluteAttack,
   isAbsoluteRunExhausted,
   markAbsoluteTriggerUsed,
   recordAbsoluteHit,
@@ -68,6 +69,8 @@ test("Absolut greift jeden Restwert von 6 bis 0 höchstens einmal an", () => {
   assert.equal(boss.hits, 0);
   assert.equal(shouldStartAbsoluteAttack(boss, 10, 10), false);
   assert.equal(isAbsoluteRunExhausted(boss), true);
+  assert.equal(finalizeAbsoluteAttack(boss, 0), true);
+  assert.equal(boss.lost, true);
   assert.equal(canFinishBoss(boss, true), false);
 });
 
@@ -150,6 +153,47 @@ test("ein neuer Secret-Durchlauf enthält keinerlei alten Bossfortschritt", () =
     inputLocked: false,
     attackWindow: false,
     dead: false,
+    lost: false,
     pendingMutation: null,
   });
+  assert.equal(shouldStartAbsoluteAttack(restarted, 4, 10), true, "Trigger 6 ist nach Retry wieder frei");
+});
+
+for (const hits of [0, 1]) {
+  test(`Trigger 0 mit Trefferstand ${hits} beendet den Absolut-Kampf als Niederlage`, () => {
+    const boss = createBossState("absolute");
+    for (let index = 0; index < hits; index += 1) recordAbsoluteHit(boss);
+    assert.equal(markAbsoluteTriggerUsed(boss, 0), true);
+    recordAbsoluteMiss(boss, { piece: { id: `zero-miss-${hits}` } });
+    assert.equal(finalizeAbsoluteAttack(boss, 0), true);
+    assert.equal(boss.lost, true);
+    assert.equal(boss.dead, false);
+    assert.equal(shouldStartAbsoluteAttack(boss, 4, 10), false);
+  });
+}
+
+test("Trigger 0 mit zwei Treffern und Miss führt zur Niederlage", () => {
+  const boss = createBossState("absolute");
+  recordAbsoluteHit(boss);
+  recordAbsoluteHit(boss);
+  assert.equal(markAbsoluteTriggerUsed(boss, 0), true);
+  recordAbsoluteMiss(boss, { piece: { id: "zero-miss-two" } });
+  assert.equal(finalizeAbsoluteAttack(boss, 0), true);
+  assert.equal(boss.hits, 2);
+  assert.equal(boss.lost, true);
+  assert.equal(boss.attackWindow, false);
+  assert.equal(boss.pendingMutation, null);
+});
+
+test("Treffer 3 beim Trigger 0 führt zum Sieg und niemals zur Niederlage", () => {
+  const boss = createBossState("absolute");
+  recordAbsoluteHit(boss);
+  recordAbsoluteHit(boss);
+  assert.equal(markAbsoluteTriggerUsed(boss, 0), true);
+  recordAbsoluteHit(boss);
+  assert.equal(finalizeAbsoluteAttack(boss, 0), false);
+  assert.equal(boss.hits, ABSOLUTE_HITS_TO_WIN);
+  assert.equal(boss.dead, true);
+  assert.equal(boss.lost, false);
+  assert.equal(canFinishBoss(boss, true), true);
 });

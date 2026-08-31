@@ -1067,6 +1067,111 @@ body.dragging-piece .board-wrap {
   display: none !important;
 }
 
+.topbar,
+.app-shell,
+.mobile-action-bar,
+.toast,
+.secret-notice {
+  transition: filter 900ms ease, opacity 900ms ease;
+}
+
+body.absolute-loss-active {
+  overflow: hidden;
+}
+
+body.absolute-loss-active .topbar,
+body.absolute-loss-active .app-shell,
+body.absolute-loss-active .mobile-action-bar,
+body.absolute-loss-active .toast,
+body.absolute-loss-active .secret-notice {
+  filter: brightness(0.16) saturate(0.35);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.absolute-loss-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #fff4f5;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(190, 0, 35, 0.23), transparent 34%),
+    rgba(10, 0, 4, 0);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: background-color 850ms ease, opacity 850ms ease, visibility 0s linear 850ms;
+}
+
+.absolute-loss-screen.visible {
+  background-color: rgba(10, 0, 4, 0.91);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.absolute-loss-content {
+  display: grid;
+  justify-items: center;
+  gap: 30px;
+  text-align: center;
+}
+
+.absolute-loss-title {
+  margin: 0;
+  color: #fff4f5;
+  font-size: clamp(3.25rem, 13vw, 8.5rem);
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  line-height: 0.92;
+  opacity: 0;
+  transform: scale(0.86);
+  text-shadow: 0 0 22px rgba(255, 20, 65, 0.55), 0 10px 45px rgba(0, 0, 0, 0.8);
+  transition: opacity 950ms ease, transform 950ms cubic-bezier(0.16, 0.8, 0.24, 1);
+}
+
+.absolute-loss-screen.show-title .absolute-loss-title {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.absolute-retry-button {
+  min-width: min(78vw, 250px);
+  min-height: 52px;
+  padding: 13px 25px;
+  border: 1px solid rgba(255, 208, 216, 0.5);
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, #b00024, #e00635);
+  box-shadow: 0 16px 45px rgba(120, 0, 25, 0.48);
+  font: inherit;
+  font-weight: 850;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(18px);
+  transition: opacity 700ms ease, transform 700ms ease, visibility 0s linear 700ms;
+}
+
+.absolute-loss-screen.show-retry .absolute-retry-button {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.absolute-retry-button:hover,
+.absolute-retry-button:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.72);
+  outline-offset: 4px;
+  transform: translateY(-2px);
+}
+
 .toast {
   position: fixed;
   left: 50%;
