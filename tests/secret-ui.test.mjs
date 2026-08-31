@@ -68,6 +68,14 @@ test("Touchziel, mobile Bossansicht und Wiederfreigabe der Steuerung sind vorges
   assert.match(game, /addEventListener\("pointerdown"/);
 });
 
+test("der fokussierbare Absolut-Boss zeigt niemals den rechteckigen Button-Fokus", () => {
+  assert.match(game, /elements\.bossCreature\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(css, /\.boss-creature\s*\{[\s\S]*appearance:\s*none[\s\S]*outline:\s*none[\s\S]*box-shadow:\s*none/s);
+  assert.match(css, /\.boss-creature:focus,\s*\.boss-creature:focus-visible\s*\{[\s\S]*outline:\s*none[\s\S]*box-shadow:\s*none/s);
+  assert.match(css, /\.boss-arena\.attack-window \.boss-creature[\s\S]*animation:\s*boss-target-pulse/);
+  assert.match(css, /button:focus-visible,\s*a:focus-visible/);
+});
+
 test("Krone, Risse und langsame Zerfallsanimation sind im Bossaufbau enthalten", () => {
   assert.match(html, /boss-crown/);
   assert.match(html, /boss-crack/);
@@ -176,7 +184,7 @@ test("Absolut nutzt einmalige Reststein-Trigger von 6 bis 0", () => {
   );
   assert.ok(
     attackFlow.indexOf("markAbsoluteTriggerUsed(state.boss, remainingCount)")
-      < attackFlow.indexOf("state.boss.pendingMutation ?? buildBossMutationPlan"),
+      < attackFlow.indexOf("buildBossMutationPlan(clonePlacements())"),
     "der Trigger muss vor dem Solverzugriff verbraucht werden",
   );
   const hitFlow = game.match(/async function animateAbsoluteHit[\s\S]*?\n\}\n\nasync function runAbsoluteAttack/)?.[0] ?? "";
@@ -239,8 +247,25 @@ test("Secret Level blockiert keine legalen Spielerplatzierungen anhand der spät
   assert.ok(validation);
   assert.doesNotMatch(validation, /\.solve\(/);
   assert.doesNotMatch(validation, /valid:\s*false/);
+  assert.doesNotMatch(validation, /buildBossMutationPlan/);
   assert.doesNotMatch(game, /Dieser Zug blockiert das Secret Level/);
-  assert.match(validation, /pendingMutation = buildBossMutationPlan\(placements\)/);
+  assert.match(validation, /state\.boss\.pendingMutation = null/);
+});
+
+test("Triggerplatzierungen werden sichtbar gerendert, bevor der Solverlauf startet", () => {
+  assert.match(game, /import \{ waitForPlacementPaint \} from "\.\/boss-attack-flow\.js/);
+  assert.match(game, /function placeCandidate\(candidate\)[\s\S]*?state\.placed\.set[\s\S]*?renderBoard\(\);[\s\S]*?renderTray\(\);[\s\S]*?renderStatus\(\);[\s\S]*?void checkProgress\(\);/);
+
+  const normalFlow = game.match(/async function runNormalBossTheft\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.ok(normalFlow);
+  assert.ok(normalFlow.indexOf("setInputLocked(true)") < normalFlow.indexOf("await waitForPlacementPaint()"));
+  assert.ok(normalFlow.indexOf("await waitForPlacementPaint()") < normalFlow.indexOf("buildBossMutationPlan(clonePlacements())"));
+
+  const absoluteFlow = game.match(/async function runAbsoluteAttack[\s\S]*?\n\}\n\nfunction renderTemplate/)?.[0] ?? "";
+  assert.ok(absoluteFlow);
+  assert.ok(absoluteFlow.indexOf("markAbsoluteTriggerUsed(state.boss, remainingCount)") < absoluteFlow.indexOf("await waitForPlacementPaint()"));
+  assert.ok(absoluteFlow.indexOf("await waitForPlacementPaint()") < absoluteFlow.indexOf("buildBossMutationPlan(clonePlacements())"));
+  assert.match(absoluteFlow, /rollbackAbsoluteTrigger\(state\.boss, remainingCount\)/);
 });
 
 test("nur geometrische Regeln und Vorlagen bleiben beim Platzieren verbindlich", () => {

@@ -28,6 +28,7 @@ import {
   runAbsoluteLossSequence,
   stopAbsoluteLossMusic,
 } from "./absolute-loss.js?v=20260831-absolute-loss-1";
+import { waitForPlacementPaint } from "./boss-attack-flow.js?v=20260831-post-paint-solver-1";
 import {
   BOSS_CONFIG,
   SECRET_NOTICE_MS,
@@ -476,17 +477,12 @@ function buildBossMutationPlan(placements) {
 function validateSecretFuture(placements) {
   if (!state.boss || state.boss.dead || state.boss.lost) return { valid: true, reason: "" };
 
-  const mustPrepareAttack = isAbsoluteBoss(state.boss)
-    ? shouldStartAbsoluteAttack(state.boss, placements.length, currentPieces().length)
-    : shouldStartNormalAttack(state.boss, placements.length, currentPieces().length);
-  if (!mustPrepareAttack) {
-    state.boss.pendingMutation = null;
-    return { valid: true, reason: "" };
-  }
-
-  // Die Prüfung bereitet einen sicheren Bossangriff nur vor. Sie darf dem
-  // Spieler niemals verraten, ob seine aktuelle Anordnung später lösbar ist.
-  state.boss.pendingMutation = buildBossMutationPlan(placements);
+  // Die Platzierungsprüfung bleibt bewusst rein geometrisch. Die teure,
+  // validierte Bossmutation startet erst nach dem sichtbaren Platzierungs-Commit.
+  // Dadurch wird kein Solverlauf zum versteckten Lösungshinweis oder Lag vor
+  // dem Rendern des gerade gelegten Steins.
+  void placements;
+  state.boss.pendingMutation = null;
   return { valid: true, reason: "" };
 }
 
@@ -993,13 +989,15 @@ function applyMutation(plan, absoluteMiss = false) {
 }
 
 async function runNormalBossTheft() {
-  const plan = state.boss.pendingMutation ?? buildBossMutationPlan(clonePlacements());
+  setInputLocked(true);
+  await waitForPlacementPaint();
+  const plan = buildBossMutationPlan(clonePlacements());
   if (!plan) {
     setBoardMessage("Der Boss beobachtet weiter. Du kannst deine Anordnung jederzeit verändern.");
+    setInputLocked(false);
     return;
   }
   const position = ["right", "left", "top"][state.boss.thefts.length % 3];
-  setInputLocked(true);
   const presentation = configureBossArena(position);
   try {
     const target = await animateBossTheftPrelude(plan, presentation);
@@ -1094,7 +1092,8 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
   // kann derselbe Restwert selbst bei mehreren Progress-Aufrufen im selben
   // UI-Zyklus keine zweite parallele Absolut-Sequenz starten.
   if (!alreadyLocked) setInputLocked(true);
-  const plan = state.boss.pendingMutation ?? buildBossMutationPlan(clonePlacements());
+  await waitForPlacementPaint();
+  const plan = buildBossMutationPlan(clonePlacements());
   if (!plan) {
     rollbackAbsoluteTrigger(state.boss, remainingCount);
     state.boss.pendingMutation = null;
