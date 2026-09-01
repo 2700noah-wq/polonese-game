@@ -69,6 +69,8 @@ const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)
 
 const elements = {
   body: document.body,
+  topbar: document.querySelector(".topbar"),
+  appShell: document.querySelector(".app-shell"),
   gamePanel: document.querySelector(".game-panel"),
   modeSelector: document.querySelector("#modeSelector"),
   secretModeButton: document.querySelector("#secretModeButton"),
@@ -251,7 +253,14 @@ function waitForLossPresentation(milliseconds) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
+function setNormalAppInert(inert) {
+  [elements.topbar, elements.appShell, elements.mobileActionBar].forEach((element) => {
+    element.inert = inert;
+  });
+}
+
 function resetAbsoluteLossPresentation() {
+  setNormalAppInert(false);
   elements.body.classList.remove("absolute-loss-active");
   elements.absoluteLossScreen.classList.remove("visible", "show-title", "show-retry");
   elements.absoluteLossScreen.setAttribute("aria-hidden", "true");
@@ -270,6 +279,7 @@ async function enterAbsoluteLoss() {
     wait: waitForLossPresentation,
     showBackdrop() {
       elements.body.classList.add("absolute-loss-active");
+      setNormalAppInert(true);
       elements.absoluteLossScreen.inert = false;
       elements.absoluteLossScreen.setAttribute("aria-hidden", "false");
       elements.absoluteLossScreen.classList.add("visible");

@@ -200,6 +200,10 @@ test("Absolut-Niederlage ist ein expliziter gesperrter State mit verzögertem Re
   assert.match(game, /async function enterAbsoluteLoss\(\)/);
   assert.match(game, /setInputLocked\(true\)/);
   assert.match(game, /runAbsoluteLossSequence/);
+  assert.match(game, /function setNormalAppInert\(inert\)[\s\S]*elements\.topbar[\s\S]*elements\.appShell[\s\S]*elements\.mobileActionBar[\s\S]*element\.inert = inert/);
+  const lossFlow = game.match(/async function enterAbsoluteLoss\(\)[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.ok(lossFlow);
+  assert.ok(lossFlow.indexOf("setNormalAppInert(true)") < lossFlow.indexOf("elements.absoluteLossScreen.inert = false"));
   assert.match(game, /if \(lost\) await enterAbsoluteLoss\(\)/);
   assert.match(game, /if \(finalizeAbsoluteAttack\(state\.boss, remainingCount\)\) await enterAbsoluteLoss\(\)/);
   assert.doesNotMatch(game, /Absolut ist entkommen/);
@@ -215,6 +219,10 @@ test("Retry stoppt Musik und erzeugt einen vollständig frischen Absolut-Durchla
   assert.ok(retryFlow.indexOf("stopAbsoluteLossMusic") < retryFlow.indexOf("restartSecretBoss()"));
   assert.match(game, /function restartSecretBoss\(\)[\s\S]*initializeSecretBossRun\(bossId,/);
   assert.match(game, /function resetInteractionState\(\)[\s\S]*resetAbsoluteLossPresentation\(\)/);
+  const resetLossFlow = game.match(/function resetAbsoluteLossPresentation\(\)[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.ok(resetLossFlow);
+  assert.ok(resetLossFlow.indexOf("setNormalAppInert(false)") < resetLossFlow.indexOf("elements.absoluteLossScreen.inert = true"));
+  assert.match(game, /elements\.absoluteLossScreen\.inert = false[\s\S]*elements\.absoluteRetryButton\.focus/);
   assert.match(game, /state\.boss = createBossState\(bossId\)/);
 });
 
