@@ -1067,6 +1067,111 @@ body.dragging-piece .board-wrap {
   display: none !important;
 }
 
+.topbar,
+.app-shell,
+.mobile-action-bar,
+.toast,
+.secret-notice {
+  transition: filter 900ms ease, opacity 900ms ease;
+}
+
+body.absolute-loss-active {
+  overflow: hidden;
+}
+
+body.absolute-loss-active .topbar,
+body.absolute-loss-active .app-shell,
+body.absolute-loss-active .mobile-action-bar,
+body.absolute-loss-active .toast,
+body.absolute-loss-active .secret-notice {
+  filter: brightness(0.16) saturate(0.35);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.absolute-loss-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #fff4f5;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(190, 0, 35, 0.23), transparent 34%),
+    rgba(10, 0, 4, 0);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: background-color 850ms ease, opacity 850ms ease, visibility 0s linear 850ms;
+}
+
+.absolute-loss-screen.visible {
+  background-color: rgba(10, 0, 4, 0.91);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.absolute-loss-content {
+  display: grid;
+  justify-items: center;
+  gap: 30px;
+  text-align: center;
+}
+
+.absolute-loss-title {
+  margin: 0;
+  color: #fff4f5;
+  font-size: clamp(3.25rem, 13vw, 8.5rem);
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  line-height: 0.92;
+  opacity: 0;
+  transform: scale(0.86);
+  text-shadow: 0 0 22px rgba(255, 20, 65, 0.55), 0 10px 45px rgba(0, 0, 0, 0.8);
+  transition: opacity 950ms ease, transform 950ms cubic-bezier(0.16, 0.8, 0.24, 1);
+}
+
+.absolute-loss-screen.show-title .absolute-loss-title {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.absolute-retry-button {
+  min-width: min(78vw, 250px);
+  min-height: 52px;
+  padding: 13px 25px;
+  border: 1px solid rgba(255, 208, 216, 0.5);
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, #b00024, #e00635);
+  box-shadow: 0 16px 45px rgba(120, 0, 25, 0.48);
+  font: inherit;
+  font-weight: 850;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(18px);
+  transition: opacity 700ms ease, transform 700ms ease, visibility 0s linear 700ms;
+}
+
+.absolute-loss-screen.show-retry .absolute-retry-button {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.absolute-retry-button:hover,
+.absolute-retry-button:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.72);
+  outline-offset: 4px;
+  transform: translateY(-2px);
+}
+
 .toast {
   position: fixed;
   left: 50%;
@@ -1573,11 +1678,25 @@ body.dragging-piece .board-wrap {
   padding: 0;
   border: 0;
   background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, -135%) scale(0.7) rotate(-8deg);
   transform-origin: center;
   transition: transform var(--boss-entry-duration, 620ms) cubic-bezier(0.2, 0.9, 0.25, 1.15), opacity 180ms ease;
+}
+
+/* Der Boss bleibt für Tastatur, Maus und Touch ein Button. Sein sichtbares
+   Reaktionssignal ist der Boss-Puls – nie der rechteckige Standard-Fokus. */
+.boss-creature:focus,
+.boss-creature:focus-visible {
+  border: 0;
+  outline: none;
+  box-shadow: none;
 }
 
 .boss-arena.visible .boss-creature {
@@ -1790,7 +1909,37 @@ body.dragging-piece .board-wrap {
   border: 4px solid #22030c;
   border-radius: 8px 8px 28px 28px;
   background: #3d0715;
-  transform: scaleX(var(--grin-scale, 0.88));
+  transform: translateY(var(--mouth-shift-y, 0px)) rotate(var(--mouth-tilt, 0deg)) scaleX(var(--grin-scale, 0.88)) scaleY(var(--mouth-scale-y, 1));
+  transition: transform 220ms ease, border-radius 220ms ease, background 220ms ease, box-shadow 220ms ease;
+}
+
+.boss-mouth::before,
+.boss-mouth::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.boss-mouth::before {
+  right: 11%;
+  bottom: 5px;
+  left: 11%;
+  height: 3px;
+  border-radius: 999px;
+  background: #090107;
+}
+
+.boss-mouth::after {
+  top: 7px;
+  left: 50%;
+  width: 3px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 38, 71, 0.82);
+  box-shadow: 0 0 8px rgba(255, 0, 49, 0.72);
+  transform: translateX(-50%) rotate(18deg) scaleY(0);
 }
 
 .boss-mouth i {
@@ -1893,6 +2042,87 @@ body.dragging-piece .board-wrap {
 .boss-arena[data-boss="hard"] { --boss-scale: 1.02; --horn-scale: 1; --crown-scale: 0.94; --grin-scale: 1.08; --eye-tilt: 6deg; }
 .boss-arena[data-boss="expert"] { --boss-scale: 1.1; --horn-scale: 1.16; --crown-scale: 1.08; --grin-scale: 1.14; --eye-tilt: 10deg; }
 .boss-arena[data-boss="absolute"] { --boss-scale: 1.16; --horn-scale: 1.3; --crown-scale: 1.2; --grin-scale: 1.18; --eye-tilt: 12deg; }
+
+/* Absolut verliert sein selbstsicheres Grinsen sichtbar mit jedem Treffer. */
+.boss-arena.is-absolute[data-damage="1"] {
+  --eye-tilt: 19deg;
+  --grin-scale: 0.78;
+  --mouth-scale-y: 0.78;
+  --mouth-shift-y: 2px;
+  --mouth-tilt: 3deg;
+}
+
+.boss-arena.is-absolute[data-damage="1"] .boss-mouth {
+  border-radius: 9px 9px 19px 19px;
+  box-shadow: inset 0 -3px 0 rgba(9, 1, 7, 0.74), 0 0 8px rgba(255, 0, 48, 0.16);
+}
+
+.boss-arena.is-absolute[data-damage="1"] .boss-mouth i:nth-child(n + 5) {
+  opacity: 0.18;
+}
+
+.boss-arena.is-absolute[data-damage="1"] .boss-mouth::before {
+  opacity: 0.38;
+  transform: rotate(-5deg);
+}
+
+.boss-arena.is-absolute[data-damage="2"] {
+  --eye-tilt: 25deg;
+  --grin-scale: 0.52;
+  --mouth-scale-y: 0.55;
+  --mouth-shift-y: 5px;
+  --mouth-tilt: 6deg;
+}
+
+.boss-arena.is-absolute[data-damage="2"] .boss-mouth {
+  border-radius: 15px 15px 7px 7px;
+  background: #1d030b;
+  box-shadow: inset 0 -5px 0 rgba(7, 1, 6, 0.92), 0 0 11px rgba(255, 0, 48, 0.24);
+}
+
+.boss-arena.is-absolute[data-damage="2"] .boss-mouth i {
+  opacity: 0.08;
+}
+
+.boss-arena.is-absolute[data-damage="2"] .boss-mouth::before {
+  opacity: 0.92;
+  transform: rotate(7deg);
+}
+
+.boss-arena.is-absolute[data-damage="3"] {
+  --eye-tilt: 31deg;
+  --grin-scale: 0.42;
+  --mouth-scale-y: 0.32;
+  --mouth-shift-y: 7px;
+  --mouth-tilt: 9deg;
+}
+
+.boss-arena.is-absolute[data-damage="3"] .boss-mouth {
+  height: 16px;
+  border-radius: 18px 18px 4px 4px;
+  background: #0b0207;
+  box-shadow: inset 0 -4px 0 #030105, 0 0 13px rgba(255, 0, 48, 0.34);
+}
+
+.boss-arena.is-absolute[data-damage="3"] .boss-mouth i {
+  opacity: 0;
+}
+
+.boss-arena.is-absolute[data-damage="3"] .boss-mouth::before {
+  right: 16%;
+  bottom: 7px;
+  left: 16%;
+  height: 4px;
+  opacity: 1;
+  background: #060106;
+  box-shadow: 0 0 5px rgba(255, 0, 44, 0.8);
+  transform: rotate(-9deg);
+}
+
+.boss-arena.is-absolute[data-damage="3"] .boss-mouth::after {
+  opacity: 0.86;
+  transform: translateX(-50%) rotate(18deg) scaleY(1);
+}
 
 .boss-portal {
   position: absolute;

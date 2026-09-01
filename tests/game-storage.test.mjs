@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sanitizeStats, saveStatsToStorage } from "../game-storage.js";
+import {
+  recordFixedLevelCompletion,
+  sanitizeStats,
+  saveStatsToStorage,
+} from "../game-storage.js";
 
 const options = {
   difficultyIds: ["easy", "medium", "hard", "expert"],
@@ -53,50 +57,54 @@ test("Bossfortschritt wird streng als boolescher Zustand geladen", () => {
   assert.equal(migrated.secret.completed.absolute, false);
 });
 
+test("normale Levels erhöhen totalSolved ausschließlich beim ersten Abschluss", () => {
+  const stats = sanitizeStats(null, options);
 
-test("Spielstand wird unter unverändertem Schlüssel und in unveränderter Struktur gespeichert", () => {
-  const stats = sanitizeStats({
-    completed: { easy: [0, 3], medium: [], hard: [], expert: [] },
-    currentLevel: { easy: 4, medium: 0, hard: 0, expert: 0 },
-    totalSolved: 2,
-    secret: {
-      unlocked: true,
-      unlockNoticeShown: false,
-      completed: { easy: true, medium: false, hard: false, expert: false, absolute: false },
-    },
-  }, options);
-  let savedKey;
-  let savedValue;
+  assert.equal(recordFixedLevelCompletion(stats, "easy", 4), true);
+  assert.equal(stats.totalSolved, 1);
+  assert.deepEqual(stats.completed.easy, [4]);
+
+  assert.equal(recordFixedLevelCompletion(stats, "easy", 4), false);
+  assert.equal(stats.totalSolved, 1);
+  assert.deepEqual(stats.completed.easy, [4]);
+
+  assert.equal(recordFixedLevelCompletion(stats, "easy", 5), true);
+  assert.equal(stats.totalSolved, 2);
+  assert.deepEqual(stats.completed.easy, [4, 5]);
+});
+
+test("Stats werden mit unverändertem Key und unveränderter JSON-Struktur gespeichert", () => {
+  const stats = sanitizeStats(null, options);
+  stats.completed.easy.push(3);
+  stats.totalSolved = 1;
+  const writes = [];
 
   const saved = saveStatsToStorage(stats, {
     storageKey: "polonese-game-v1",
     storageProvider: () => ({
       setItem(key, value) {
-        savedKey = key;
-        savedValue = value;
+        writes.push([key, value]);
       },
     }),
   });
 
   assert.equal(saved, true);
-  assert.equal(savedKey, "polonese-game-v1");
-  assert.deepEqual(JSON.parse(savedValue), stats);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0][0], "polonese-game-v1");
+  assert.deepEqual(JSON.parse(writes[0][1]), stats);
 });
 
-test("Fehler von localStorage.setItem werden nicht nach außen weitergeworfen", () => {
+test("ein blockierter localStorage-Schreibzugriff verlässt den Helper nicht", () => {
   const stats = sanitizeStats(null, options);
-  let saved;
-
   assert.doesNotThrow(() => {
-    saved = saveStatsToStorage(stats, {
+    const saved = saveStatsToStorage(stats, {
       storageKey: "polonese-game-v1",
       storageProvider: () => ({
         setItem() {
-          throw new Error("Storage blockiert");
+          throw new Error("Storage gesperrt");
         },
       }),
     });
+    assert.equal(saved, false);
   });
-
-  assert.equal(saved, false);
 });

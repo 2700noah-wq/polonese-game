@@ -10,6 +10,7 @@ import {
   createBossSelectionItems,
   isBossUnlocked,
   isSecretModeUnlocked,
+  planAbsoluteMutation,
   planNovelMutation,
   secretModeLockMessage,
 } from "../secret-levels.js";
@@ -31,7 +32,8 @@ function extendAlongSolution(puzzle, current, targetCount) {
 }
 
 function planAttack(puzzle, placements, attackIndex) {
-  return planNovelMutation({
+  const planner = puzzle.bossId === "absolute" ? planAbsoluteMutation : planNovelMutation;
+  return planner({
     puzzle,
     placements,
     bossId: puzzle.bossId,
@@ -40,6 +42,74 @@ function planAttack(puzzle, placements, attackIndex) {
     seed: `${puzzle.bossId}-${attackIndex}`,
   });
 }
+
+test("Absolut bereitet den ersten Angriff bei 6 Reststeinen ohne blockierende Vollsuche vor", () => {
+  const puzzle = createBossPuzzle("absolute");
+  const placements = extendAlongSolution(puzzle, [], 4);
+  const seed = `${puzzle.seed}-0-${placements.map((placement) => placement.pieceId).join("-")}`;
+  const startedAt = performance.now();
+  const plan = planAbsoluteMutation({
+    puzzle,
+    placements,
+    bossId: "absolute",
+    serial: 1,
+    attackIndex: 0,
+    seed,
+  });
+  const elapsed = performance.now() - startedAt;
+
+  assert.ok(plan, "der 6er-Angriff braucht einen validierten Diebstahlplan");
+  assert.ok(elapsed < 2000, `der 6er-Plan darf den UI-Thread nicht blockieren (${Math.round(elapsed)} ms)`);
+  assert.equal(plan.model.validateCompletedBoard(plan.solution, plan.clues), true);
+  const retained = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
+  for (const placement of retained) {
+    assert.equal(plan.solution.some((candidate) => samePlacement(candidate, placement)), true);
+  }
+});
+
+test("Absolut findet nach einem 6er-Miss auch für eine freie 5er-Anordnung einen Folgeangriff", () => {
+  let puzzle = createBossPuzzle("absolute");
+  const firstPlacements = ["z", "p", "t", "y"]
+    .map((pieceId) => puzzle.solution.find((placement) => placement.pieceId === pieceId));
+  const firstPlan = planAbsoluteMutation({
+    puzzle,
+    placements: firstPlacements,
+    bossId: "absolute",
+    serial: 1,
+    attackIndex: 0,
+    seed: `${puzzle.seed}-0-${firstPlacements.map((placement) => placement.pieceId).join("-")}`,
+  });
+  assert.ok(firstPlan);
+  puzzle = applyPlan(puzzle, firstPlan);
+
+  // Diese geometrisch erlaubte Anordnung konnte der schnelle Standardformen-
+  // Pfad nicht mutieren. Der begrenzte Custom-Planer muss den 5er-Spawn retten.
+  const followUpPlacements = [
+    { pieceId: "p", variant: 1, row: 0, col: 0 },
+    { pieceId: "t", variant: 3, row: 1, col: 0 },
+    { pieceId: "y", variant: 3, row: 3, col: 0 },
+    { pieceId: "f", variant: 0, row: 0, col: 3 },
+    { pieceId: "l", variant: 0, row: 0, col: 6 },
+  ];
+  const startedAt = performance.now();
+  const followUpPlan = planAbsoluteMutation({
+    puzzle,
+    placements: followUpPlacements,
+    bossId: "absolute",
+    serial: 2,
+    attackIndex: 1,
+    seed: `${puzzle.seed}-1-${followUpPlacements.map((placement) => placement.pieceId).join("-")}`,
+  });
+  const elapsed = performance.now() - startedAt;
+
+  assert.ok(followUpPlan, "der erstmals erreichte 5er-Wert braucht einen Folgeangriff");
+  assert.ok(elapsed < 1500, `der begrenzte Folgeplan darf den UI-Thread nicht blockieren (${Math.round(elapsed)} ms)`);
+  assert.equal(followUpPlan.model.validateCompletedBoard(followUpPlan.solution, followUpPlan.clues), true);
+  const retained = followUpPlacements.filter((placement) => placement.pieceId !== followUpPlan.stolen.piece.id);
+  for (const placement of retained) {
+    assert.equal(followUpPlan.solution.some((candidate) => samePlacement(candidate, placement)), true);
+  }
+});
 
 function samePlacement(left, right) {
   return left.pieceId === right.pieceId
@@ -57,6 +127,20 @@ function applyPlan(puzzle, plan) {
     model: plan.model,
   };
 }
+
+test("ein neu erzeugtes Secret-Puzzle verwirft eine vorherige Bossmutation vollständig", () => {
+  const initial = createBossPuzzle("easy");
+  const placements = extendAlongSolution(initial, [], 8);
+  const plan = planAttack(initial, placements, 0);
+  assert.ok(plan);
+  const mutated = applyPlan(initial, plan);
+  assert.notDeepEqual(mutated.pieces, initial.pieces);
+
+  const restarted = createBossPuzzle("easy");
+  assert.deepEqual(restarted.pieces, initial.pieces);
+  assert.deepEqual(restarted.clues, initial.clues);
+  assert.deepEqual(restarted.solution, initial.solution);
+});
 
 test("Secret Level und Bossfreischaltungen werden aus echtem Fortschritt berechnet", () => {
   const none = completedDifficulties();
@@ -139,13 +223,19 @@ for (const bossId of ["easy", "medium", "hard", "expert"]) {
   });
 }
 
-test("Absolut bleibt auch nach mehreren verpassten, validierten Angriffen kontrolliert lösbar", () => {
+test("Absolut bleibt nach Misses auf allen Triggerwerten von 6 bis 0 vollständig lösbar", () => {
   let puzzle = createBossPuzzle("absolute");
   let placements = [];
-  for (let attackIndex = 0; attackIndex < 6; attackIndex += 1) {
-    placements = extendAlongSolution(puzzle, placements, 8);
+  const remainingTriggers = [6, 5, 4, 3, 2, 1, 0];
+
+  for (let attackIndex = 0; attackIndex < remainingTriggers.length; attackIndex += 1) {
+    const remainingCount = remainingTriggers[attackIndex];
+    const triggerPlacementCount = puzzle.pieces.length - remainingCount;
+    placements = extendAlongSolution(puzzle, placements, triggerPlacementCount);
+    assert.equal(placements.length, triggerPlacementCount);
+
     const plan = planAttack(puzzle, placements, attackIndex);
-    assert.ok(plan);
+    assert.ok(plan, `Miss bei ${remainingCount} Reststeinen muss validierbar sein`);
     assert.equal(plan.model.validateCompletedBoard(plan.solution, plan.clues), true);
     const retained = placements.filter((placement) => placement.pieceId !== plan.stolen.piece.id);
     for (const placement of retained) {
@@ -153,5 +243,16 @@ test("Absolut bleibt auch nach mehreren verpassten, validierten Angriffen kontro
     }
     placements = retained;
     puzzle = applyPlan(puzzle, plan);
+
+    assert.equal(placements.length, triggerPlacementCount - 1);
+    placements = extendAlongSolution(puzzle, placements, triggerPlacementCount);
+    assert.equal(placements.length, triggerPlacementCount, "der Ersatzstein schließt die Miss-Lücke wieder");
+    for (const placement of placements) {
+      assert.equal(puzzle.solution.some((candidate) => samePlacement(candidate, placement)), true);
+    }
   }
+
+  assert.equal(placements.length, puzzle.pieces.length);
+  assert.equal(puzzle.model.validateCompletedBoard(placements, puzzle.clues), true);
+  assert.equal(puzzle.model.validateCompletedBoard(puzzle.solution, puzzle.clues), true);
 });

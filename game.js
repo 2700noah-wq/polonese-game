@@ -18,7 +18,17 @@ import {
   theftPresentationFor,
 } from "./boss-animation.js?v=20260827-mobile-drag-absolute-1";
 import { createPuzzleModel } from "./puzzle-model.js?v=20260824-secret-1";
-import { sanitizeStats, saveStatsToStorage } from "./game-storage.js?v=20260831-storage-write-1";
+import {
+  recordFixedLevelCompletion,
+  sanitizeStats,
+  saveStatsToStorage,
+} from "./game-storage.js?v=20260831-absolute-loss-1";
+import {
+  playAbsoluteLossMusic,
+  runAbsoluteLossSequence,
+  stopAbsoluteLossMusic,
+} from "./absolute-loss.js?v=20260831-absolute-loss-1";
+import { waitForPlacementPaint } from "./boss-attack-flow.js?v=20260831-post-paint-solver-1";
 import {
   BOSS_CONFIG,
   SECRET_NOTICE_MS,
@@ -27,22 +37,26 @@ import {
   createBossSelectionItems,
   isBossUnlocked,
   isSecretModeUnlocked,
+  planAbsoluteMutation,
   planNovelMutation,
   secretModeLockMessage,
-} from "./secret-levels.js?v=20260826-notice-3s-1";
+} from "./secret-levels.js?v=20260828-absolute-followup-1";
 import {
   ABSOLUTE_HITS_TO_WIN,
   NORMAL_BOSS_THEFTS,
   absoluteReactionWindow,
   canFinishBoss,
   createBossState,
+  finalizeAbsoluteAttack,
   isAbsoluteBoss,
+  markAbsoluteTriggerUsed,
   recordAbsoluteHit,
   recordAbsoluteMiss,
   recordTheft,
+  rollbackAbsoluteTrigger,
   shouldStartAbsoluteAttack,
   shouldStartNormalAttack,
-} from "./boss-engine.js?v=20260826-boss-phases-1";
+} from "./boss-engine.js?v=20260831-absolute-loss-1";
 
 const STORAGE_KEY = "polonese-game-v1";
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
@@ -55,6 +69,8 @@ const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)
 
 const elements = {
   body: document.body,
+  topbar: document.querySelector(".topbar"),
+  appShell: document.querySelector(".app-shell"),
   gamePanel: document.querySelector(".game-panel"),
   modeSelector: document.querySelector("#modeSelector"),
   secretModeButton: document.querySelector("#secretModeButton"),
@@ -101,6 +117,9 @@ const elements = {
   secretNotice: document.querySelector("#secretNotice"),
   bossArena: document.querySelector("#bossArena"),
   bossCreature: document.querySelector("#bossCreature"),
+  absoluteLossScreen: document.querySelector("#absoluteLossScreen"),
+  absoluteRetryButton: document.querySelector("#absoluteRetryButton"),
+  absoluteLossMusic: document.querySelector("#absoluteLossMusic"),
   winDialog: document.querySelector("#winDialog"),
   winEyebrow: document.querySelector("#winEyebrow"),
   winTitle: document.querySelector("#winTitle"),
@@ -222,12 +241,60 @@ function refreshActiveDrag() {
 }
 
 function saveStats() {
-  saveStatsToStorage(stats, { storageKey: STORAGE_KEY });
+  return saveStatsToStorage(stats, { storageKey: STORAGE_KEY });
 }
 
 function wait(milliseconds) {
   const duration = prefersReducedMotion.matches ? Math.min(milliseconds, 45) : milliseconds;
   return new Promise((resolve) => window.setTimeout(resolve, duration));
+}
+
+function waitForLossPresentation(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function setNormalAppInert(inert) {
+  [elements.topbar, elements.appShell, elements.mobileActionBar].forEach((element) => {
+    element.inert = inert;
+  });
+}
+
+function resetAbsoluteLossPresentation() {
+  setNormalAppInert(false);
+  elements.body.classList.remove("absolute-loss-active");
+  elements.absoluteLossScreen.classList.remove("visible", "show-title", "show-retry");
+  elements.absoluteLossScreen.setAttribute("aria-hidden", "true");
+  elements.absoluteLossScreen.inert = true;
+  stopAbsoluteLossMusic(elements.absoluteLossMusic);
+}
+
+async function enterAbsoluteLoss() {
+  if (!isAbsoluteBoss(state.boss) || !state.boss.lost) return;
+  clearDragSession();
+  document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+  hideBossArena();
+  setInputLocked(true);
+  setBoardMessage("Absolut hat den letzten Angriff überstanden.");
+  await runAbsoluteLossSequence({
+    wait: waitForLossPresentation,
+    showBackdrop() {
+      elements.body.classList.add("absolute-loss-active");
+      setNormalAppInert(true);
+      elements.absoluteLossScreen.inert = false;
+      elements.absoluteLossScreen.setAttribute("aria-hidden", "false");
+      elements.absoluteLossScreen.classList.add("visible");
+    },
+    showTitle() {
+      elements.absoluteLossScreen.classList.add("show-title");
+    },
+    showRetry() {
+      elements.absoluteLossScreen.classList.add("show-retry");
+      elements.absoluteRetryButton.focus({ preventScroll: true });
+    },
+    playMusic() {
+      playAbsoluteLossMusic(elements.absoluteLossMusic);
+    },
+  });
 }
 
 function clonePlacements() {
@@ -299,6 +366,7 @@ function setBoardMessage(message, isError = false) {
 }
 
 function resetInteractionState() {
+  resetAbsoluteLossPresentation();
   clearDragSession({ clearPreview: false });
   state.solved = false;
   state.placed.clear();
@@ -311,7 +379,7 @@ function resetInteractionState() {
   state.inputLocked = false;
   elements.body.classList.remove("dragging-piece", "boss-sequence-active");
   clearTheftEffects();
-  hideBossArena();
+  resetBossPresentation();
 }
 
 function createFixedPuzzle() {
@@ -339,21 +407,37 @@ function loadFixedPuzzle() {
   renderAll();
 }
 
-function startSecretBoss(bossId) {
-  if (!isBossUnlocked(bossId, stats.completed, stats.secret)) {
-    showSecretNotice(bossLockMessage(bossId));
-    return;
-  }
-  if (elements.secretPickerDialog.open) elements.secretPickerDialog.close();
+function initializeSecretBossRun(bossId, {
+  message = "Lege zuerst die Vorlagen-Teile. Der Boss beobachtet jeden Zug.",
+  toast = `${BOSS_CONFIG[bossId].label}: Der Boss wartet.`,
+} = {}) {
   resetInteractionState();
   state.mode = "secret";
   state.bossId = bossId;
   state.boss = createBossState(bossId);
   state.puzzle = createBossPuzzle(bossId);
   state.model = state.puzzle.model;
-  setBoardMessage("Lege zuerst die Vorlagen-Teile. Der Boss beobachtet jeden Zug.");
+  setBoardMessage(message);
   renderAll();
-  showToast(`${BOSS_CONFIG[bossId].label}: Der Boss wartet.`);
+  showToast(toast);
+}
+
+function startSecretBoss(bossId) {
+  if (!isBossUnlocked(bossId, stats.completed, stats.secret)) {
+    showSecretNotice(bossLockMessage(bossId));
+    return;
+  }
+  if (elements.secretPickerDialog.open) elements.secretPickerDialog.close();
+  initializeSecretBossRun(bossId);
+}
+
+function restartSecretBoss() {
+  if (!state.bossId) return;
+  const bossId = state.bossId;
+  initializeSecretBossRun(bossId, {
+    message: "Secret Level vollständig neu gestartet. Lege zuerst wieder die Vorlagen-Teile.",
+    toast: `${BOSS_CONFIG[bossId].label}: Neuer Bossdurchlauf.`,
+  });
 }
 
 function placementAtCell(cellIndex) {
@@ -388,8 +472,9 @@ function candidateFromCell(cellIndex) {
 }
 
 function buildBossMutationPlan(placements) {
-  if (!state.boss || state.boss.dead) return null;
-  return planNovelMutation({
+  if (!state.boss || state.boss.dead || state.boss.lost) return null;
+  const planMutation = isAbsoluteBoss(state.boss) ? planAbsoluteMutation : planNovelMutation;
+  return planMutation({
     puzzle: state.puzzle,
     placements,
     bossId: state.bossId,
@@ -400,19 +485,14 @@ function buildBossMutationPlan(placements) {
 }
 
 function validateSecretFuture(placements) {
-  if (!state.boss || state.boss.dead) return { valid: true, reason: "" };
+  if (!state.boss || state.boss.dead || state.boss.lost) return { valid: true, reason: "" };
 
-  const mustPrepareAttack = isAbsoluteBoss(state.boss)
-    ? shouldStartAbsoluteAttack(state.boss, placements.length, currentPieces().length)
-    : shouldStartNormalAttack(state.boss, placements.length, currentPieces().length);
-  if (!mustPrepareAttack) {
-    state.boss.pendingMutation = null;
-    return { valid: true, reason: "" };
-  }
-
-  // Die Prüfung bereitet einen sicheren Bossangriff nur vor. Sie darf dem
-  // Spieler niemals verraten, ob seine aktuelle Anordnung später lösbar ist.
-  state.boss.pendingMutation = buildBossMutationPlan(placements);
+  // Die Platzierungsprüfung bleibt bewusst rein geometrisch. Die teure,
+  // validierte Bossmutation startet erst nach dem sichtbaren Platzierungs-Commit.
+  // Dadurch wird kein Solverlauf zum versteckten Lösungshinweis oder Lag vor
+  // dem Rendern des gerade gelegten Steins.
+  void placements;
+  state.boss.pendingMutation = null;
   return { valid: true, reason: "" };
 }
 
@@ -585,6 +665,10 @@ function undo() {
 }
 
 function resetBoard() {
+  if (state.mode === "secret") {
+    restartSecretBoss();
+    return;
+  }
   if (!state.placed.size || interactionBlocked()) return;
   pushHistory();
   state.placed.clear();
@@ -621,9 +705,7 @@ function syncSecretUnlockAfterNormalProgress() {
 }
 
 function completeFixedLevel() {
-  const completed = stats.completed[state.difficulty];
-  if (!completed.includes(state.levelIndex)) completed.push(state.levelIndex);
-  stats.totalSolved += 1;
+  recordFixedLevelCompletion(stats, state.difficulty, state.levelIndex);
   syncSecretUnlockAfterNormalProgress();
   recordWinAndOpen({
     eyebrow: "Aufgabe geschafft",
@@ -656,6 +738,7 @@ async function checkProgress() {
     return;
   }
   if (isAbsoluteBoss(state.boss)) {
+    if (state.boss.lost) return;
     if (shouldStartAbsoluteAttack(state.boss, state.placed.size, currentPieces().length)) {
       await runAbsoluteAttack();
       return;
@@ -693,6 +776,7 @@ function hideBossArena() {
   window.clearTimeout(bossHitTimeoutId);
   bossHitTimeoutId = null;
   bossHitResolver = null;
+  if (state.boss) state.boss.attackWindow = false;
   clearTheftEffects();
   if (!elements.bossArena) return;
   elements.bossArena.className = "boss-arena";
@@ -701,8 +785,17 @@ function hideBossArena() {
   elements.bossCreature.tabIndex = -1;
 }
 
+function resetBossPresentation() {
+  hideBossArena();
+  if (!elements.bossArena) return;
+  elements.bossArena.removeAttribute("data-boss");
+  elements.bossArena.removeAttribute("data-damage");
+  elements.bossArena.removeAttribute("style");
+}
+
 function setInputLocked(locked) {
   state.inputLocked = locked;
+  if (state.boss) state.boss.inputLocked = locked;
   elements.body.classList.toggle("boss-sequence-active", locked);
   renderTray();
   renderStatus();
@@ -906,13 +999,15 @@ function applyMutation(plan, absoluteMiss = false) {
 }
 
 async function runNormalBossTheft() {
-  const plan = state.boss.pendingMutation ?? buildBossMutationPlan(clonePlacements());
+  setInputLocked(true);
+  await waitForPlacementPaint();
+  const plan = buildBossMutationPlan(clonePlacements());
   if (!plan) {
     setBoardMessage("Der Boss beobachtet weiter. Du kannst deine Anordnung jederzeit verändern.");
+    setInputLocked(false);
     return;
   }
   const position = ["right", "left", "top"][state.boss.thefts.length % 3];
-  setInputLocked(true);
   const presentation = configureBossArena(position);
   try {
     const target = await animateBossTheftPrelude(plan, presentation);
@@ -960,7 +1055,7 @@ function waitForBossHit(milliseconds) {
   });
 }
 
-async function animateAbsoluteHit() {
+async function animateAbsoluteHit({ keepLocked = false } = {}) {
   const nextHit = state.boss.hits + 1;
   const hitClass = `hit-${nextHit}`;
   elements.bossArena.classList.remove("searching", "targeting", "target-locked", "blink-confirm", "grinning");
@@ -989,23 +1084,34 @@ async function animateAbsoluteHit() {
   setBoardMessage(`Treffer ${state.boss.hits} von ${ABSOLUTE_HITS_TO_WIN}! Der Boss wird wütender.`);
   await wait(520);
   hideBossArena();
-  await wait(900);
-  await runAbsoluteAttack({ alreadyLocked: true });
+  if (!keepLocked) setInputLocked(false);
 }
 
 async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
-  if (state.boss.dead || state.solved) {
+  if (state.boss.dead || state.boss.lost || state.solved) {
     if (alreadyLocked) setInputLocked(false);
     return;
   }
-  const plan = buildBossMutationPlan(clonePlacements());
-  if (!plan) {
-    setBoardMessage("Das Portal bleibt vorerst geschlossen. Du kannst deine Anordnung weiter verändern.");
+  const remainingCount = currentPieces().length - state.placed.size;
+  if (!markAbsoluteTriggerUsed(state.boss, remainingCount)) {
     if (alreadyLocked) setInputLocked(false);
     return;
   }
 
+  // Der Trigger wird vor Lock, Solver, Portal und Animation verbraucht. Damit
+  // kann derselbe Restwert selbst bei mehreren Progress-Aufrufen im selben
+  // UI-Zyklus keine zweite parallele Absolut-Sequenz starten.
   if (!alreadyLocked) setInputLocked(true);
+  await waitForPlacementPaint();
+  const plan = buildBossMutationPlan(clonePlacements());
+  if (!plan) {
+    rollbackAbsoluteTrigger(state.boss, remainingCount);
+    state.boss.pendingMutation = null;
+    setBoardMessage("Das Portal bleibt vorerst geschlossen. Du kannst deine Anordnung weiter verändern.");
+    setInputLocked(false);
+    return;
+  }
+
   const position = chooseAbsolutePosition();
   const presentation = configureBossArena(position);
   elements.bossArena.classList.add("portal-open");
@@ -1015,10 +1121,12 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
   const hit = await waitForBossHit(absoluteReactionWindow(state.boss.hits));
 
   if (hit) {
-    await animateAbsoluteHit();
+    await animateAbsoluteHit({ keepLocked: remainingCount === 0 });
+    if (finalizeAbsoluteAttack(state.boss, remainingCount)) await enterAbsoluteLoss();
     return;
   }
 
+  let lost = false;
   try {
     await animateBossTheftCapture(target, presentation);
     applyMutation(plan, true);
@@ -1027,8 +1135,10 @@ async function runAbsoluteAttack({ alreadyLocked = false } = {}) {
     await wait(140);
   } finally {
     hideBossArena();
-    setInputLocked(false);
+    lost = finalizeAbsoluteAttack(state.boss, remainingCount);
+    if (!lost) setInputLocked(false);
   }
+  if (lost) await enterAbsoluteLoss();
 }
 
 function renderTemplate() {
@@ -1193,7 +1303,9 @@ function renderStatus() {
     if (isAbsoluteBoss(state.boss)) {
       elements.secretBossStatus.textContent = state.boss.dead
         ? "Boss besiegt · Puzzle beenden"
-        : `Treffer ${state.boss.hits} / ${ABSOLUTE_HITS_TO_WIN}`;
+        : state.boss.lost
+          ? "Kampf verloren · Erneut versuchen"
+          : `Treffer ${state.boss.hits} / ${ABSOLUTE_HITS_TO_WIN}`;
     } else {
       elements.secretBossStatus.textContent = `Bossangriffe ${state.boss.attackCount} / ${NORMAL_BOSS_THEFTS}`;
     }
@@ -1212,7 +1324,8 @@ function renderStatus() {
   elements.placedCounter.textContent = `${state.placed.size} / ${currentPieces().length} Teile`;
   elements.headerSolved.textContent = String(stats.totalSolved);
   elements.undoButton.disabled = state.history.length === 0 || interactionBlocked();
-  elements.resetButton.disabled = state.placed.size === 0 || interactionBlocked();
+  elements.resetButton.disabled = interactionBlocked()
+    || (state.mode === "fixed" && state.placed.size === 0);
   elements.statsPercent.textContent = `${Math.round((fixedSolved / (FIXED_LEVELS_PER_DIFFICULTY * DIFFICULTY_ORDER.length)) * 100)} %`;
 }
 
@@ -1513,6 +1626,11 @@ elements.mobileFlipButton.addEventListener("click", flipSelected);
 elements.mobileCancelButton.addEventListener("click", () => cancelSelection({ restorePickedUp: true }));
 elements.mobileActionBar.addEventListener("pointerdown", (event) => event.stopPropagation());
 elements.mobileActionBar.addEventListener("click", (event) => event.stopPropagation());
+elements.absoluteRetryButton.addEventListener("click", () => {
+  if (!isAbsoluteBoss(state.boss) || !state.boss.lost) return;
+  stopAbsoluteLossMusic(elements.absoluteLossMusic);
+  restartSecretBoss();
+});
 
 elements.pieceTray.addEventListener("pointerdown", (event) => {
   const card = event.target.closest("[data-piece]");
@@ -1644,8 +1762,13 @@ elements.continueButton.addEventListener("click", () => {
   }
 });
 
+function isGameDialogOpen() {
+  return Boolean(document.querySelector("dialog[open]"));
+}
+
 document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, textarea, select")) return;
+  if (isGameDialogOpen()) return;
   if (event.key.toLowerCase() === "r") rotateSelected();
   if (event.key.toLowerCase() === "f") flipSelected();
   if (event.key === "Escape" && state.selectedPieceId) cancelSelection({ restorePickedUp: true });
