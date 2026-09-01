@@ -65,11 +65,12 @@ function difficultyFinished(completed, difficulty) {
     && new Set(completed[difficulty]).size >= FIXED_LEVELS_PER_DIFFICULTY;
 }
 
-export function isSecretModeUnlocked(completed) {
-  return difficultyFinished(completed, "easy");
+export function isSecretModeUnlocked(completed, { adminMode = false } = {}) {
+  return adminMode || difficultyFinished(completed, "easy");
 }
 
-export function isBossUnlocked(bossId, completed, secretProgress) {
+export function isBossUnlocked(bossId, completed, secretProgress, { adminMode = false } = {}) {
+  if (adminMode) return true;
   if (bossId === "absolute") {
     return ["easy", "medium", "hard", "expert"].every((id) => secretProgress?.completed?.[id] === true);
   }
@@ -89,11 +90,11 @@ export function bossLockMessage(bossId) {
   return `Schließe zuerst alle Level von Stufe ${label} ab, um diesen Boss freizuschalten.`;
 }
 
-export function createBossSelectionItems(completed, secretProgress) {
+export function createBossSelectionItems(completed, secretProgress, unlockOptions) {
   return BOSS_ORDER.map((bossId) => ({
     id: bossId,
     ...BOSS_CONFIG[bossId],
-    unlocked: isBossUnlocked(bossId, completed, secretProgress),
+    unlocked: isBossUnlocked(bossId, completed, secretProgress, unlockOptions),
     completed: secretProgress?.completed?.[bossId] === true,
   }));
 }

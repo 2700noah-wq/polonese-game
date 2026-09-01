@@ -9,6 +9,7 @@ import {
   placementsEqual,
 } from "./logic.js?v=20260819-2";
 import { createLevelPickerItems } from "./level-picker.js?v=20260820-1";
+import { isAdminModeEnabled } from "./admin-mode.js?v=20260901-admin-mode-1";
 import { pointerAnchorForPlacement, placementFromBoardPoint } from "./placement-math.js?v=20260821-1";
 import { clearDragArtifacts, releaseCapturedPointer } from "./drag-cleanup.js?v=20260827-mobile-drag-1";
 import {
@@ -59,6 +60,7 @@ import {
 } from "./boss-engine.js?v=20260831-absolute-loss-1";
 
 const STORAGE_KEY = "polonese-game-v1";
+const unlockOptions = Object.freeze({ adminMode: isAdminModeEnabled() });
 const DIFFICULTY_ORDER = Object.keys(DIFFICULTIES);
 const DRAG_THRESHOLD = 8;
 const TOUCH_PREVIEW_LIFT = 64;
@@ -423,7 +425,7 @@ function initializeSecretBossRun(bossId, {
 }
 
 function startSecretBoss(bossId) {
-  if (!isBossUnlocked(bossId, stats.completed, stats.secret)) {
+  if (!isBossUnlocked(bossId, stats.completed, stats.secret, unlockOptions)) {
     showSecretNotice(bossLockMessage(bossId));
     return;
   }
@@ -1274,7 +1276,7 @@ function renderStatus() {
   if (!state.puzzle || !state.model) return;
   const completed = stats.completed[state.difficulty];
   const fixedSolved = DIFFICULTY_ORDER.reduce((sum, difficulty) => sum + stats.completed[difficulty].length, 0);
-  const secretUnlocked = isSecretModeUnlocked(stats.completed);
+  const secretUnlocked = isSecretModeUnlocked(stats.completed, unlockOptions);
 
   elements.modeSelector.querySelectorAll("[data-mode]").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === state.mode);
@@ -1366,7 +1368,7 @@ function renderLevelPicker() {
 }
 
 function renderSecretPicker() {
-  const items = createBossSelectionItems(stats.completed, stats.secret);
+  const items = createBossSelectionItems(stats.completed, stats.secret, unlockOptions);
   elements.secretBossGrid.replaceChildren();
   items.forEach((item) => {
     const button = document.createElement("button");
@@ -1405,7 +1407,7 @@ function openDialog(dialog) {
 }
 
 function openSecretPicker() {
-  if (!isSecretModeUnlocked(stats.completed)) {
+  if (!isSecretModeUnlocked(stats.completed, unlockOptions)) {
     showSecretNotice(secretModeLockMessage());
     return;
   }
